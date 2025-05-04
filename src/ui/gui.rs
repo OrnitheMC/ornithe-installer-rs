@@ -19,7 +19,12 @@ use crate::{
     },
 };
 
-use super::Mode;
+#[derive(PartialEq, Clone, Copy, Debug)]
+enum Mode {
+    Client,
+    Server,
+    MMC,
+}
 
 pub async fn run() -> Result<(), InstallerError> {
     info!("Starting GUI installer...");
