@@ -54,6 +54,13 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2
       - run: rustup target add ${{ matrix.target }}
+        # Build the CLI only binary
+      - run: cargo build --no-default-features --release --target ${{ matrix.target }}
+      - run: mv "target/${{ matrix.target }}/release/ornithe-installer-rs" "target/${{ matrix.target }}/release/ornithe-installer-rs-cli.bin"
+        if: runner.os != 'Windows'
+      - run: mv "target/${{ matrix.target }}/release/ornithe-installer-rs.exe" "target/${{ matrix.target }}/release/ornithe-installer-rs-cli.exe"
+        if: runner.os == 'Windows'
+        # Regular build with GUI
       - run: cargo build --release --target ${{ matrix.target }}
       - run: mv "target/${{ matrix.target }}/release/ornithe-installer-rs" "target/${{ matrix.target }}/release/ornithe-installer-rs.bin"
         if: runner.os != 'Windows'

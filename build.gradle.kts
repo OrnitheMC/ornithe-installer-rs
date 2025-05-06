@@ -40,6 +40,14 @@ publishing {
                         "exe" else "bin"
                 )
             }
+            artifact (
+                file(
+                    "$projectDir/target/$target/release/ornithe-installer-rs-cli." + if (os?.contains("windows") == true) // thanks kotlin
+                        "exe" else "bin"
+                )
+            ) {
+                classifier = "cli"
+            }
         }
     }
 
