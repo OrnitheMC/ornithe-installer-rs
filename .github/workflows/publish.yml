@@ -55,6 +55,8 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.build }}
       - run: rustup target add ${{ matrix.target }}
         # Build the CLI only binary
       - run: cargo build --no-default-features --release --target ${{ matrix.target }}
