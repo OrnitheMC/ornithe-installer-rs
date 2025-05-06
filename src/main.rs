@@ -18,6 +18,7 @@ async fn main() {
     info!("Ornithe Installer v{}", VERSION);
 
     // The first argument is the binary name
+    #[cfg(feature = "gui")]
     if std::env::args().count() <= 1 {
         if let Ok(_) = crate::ui::gui::run().await {
             return;
