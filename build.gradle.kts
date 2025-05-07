@@ -9,15 +9,10 @@ group = "net.ornithemc"
 val env: Map<String, String> = System.getenv()
 
 val versionRegex: Pattern = Pattern.compile("version = \"(.*)\"")
-version = if (env["SNAPSHOTS_URL"] != null) {
-    "0-SNAPSHOT"
-} else {
-    file("Cargo.toml").useLines {
-        it.map { versionRegex.matcher(it) }.first {
-
-            it.matches()
-        }.group(1)
-    }
+version = file("Cargo.toml").useLines {
+    it.map { versionRegex.matcher(it) }.first {
+        it.matches()
+    }.group(1)
 }
 
 publishing {
@@ -64,7 +59,7 @@ publishing {
             }
         }
 
-        if (env["SNAPSHOTS_URL"] != null) {
+        /*if (env["SNAPSHOTS_URL"] != null) {
             repositories.maven {
                 name = "Snapshots"
                 url = uri(env["SNAPSHOTS_URL"]!!)
@@ -74,7 +69,7 @@ publishing {
                     password = env["SNAPSHOTS_PASSWORD"]
                 }
             }
-        }
+        }*/
     }
 }
 
