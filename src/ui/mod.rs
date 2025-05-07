@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
 pub mod cli;
+
+#[cfg(feature = "gui")]
 pub mod gui;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
