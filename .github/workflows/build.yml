@@ -14,21 +14,32 @@ jobs:
   build:
     strategy:
       matrix:
-        build: [linux, windows, mac]
+        build: [linux-x86_64, windows-x86, windows-x86_64, windows-aarch64]
         include:
-          - build: linux
+          - build: linux-x86_64
             os: ubuntu-latest
-            rust: "stable"
-          - build: windows
+            target: x86_64-unknown-linux-gnu
+          - build: windows-x86
             os: windows-latest
-            rust: "stable"
-          - build: mac
-            os: macos-latest
-            rust: "stable"
+            target: i686-pc-windows-msvc
+            msvc_arch: amd64_x86
+          - build: windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            msvc_arch: amd64
+          - build: windows-aarch64
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            msvc_arch: amd64_arm64
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
+      - name: Install C toolchain (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
       - name: Install packages (Linux)
         if: runner.os == 'Linux'
         uses: awalsh128/cache-apt-pkgs-action@v1.4.3
@@ -39,12 +50,67 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: stable
       - uses: Swatinem/rust-cache@v2
+      - run: rustup target add ${{ matrix.target }}
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --verbose --target ${{ matrix.target }}
       - name: Build release binary
-        run: cargo build --release
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CI builds (${{ matrix.build }})
+          path: |
+            target/**/ornithe-installer-rs*
+            !target/**/ornithe-installer-rs.d
+            !target/**/build/
+  build_macos:
+    runs-on: ubuntu-latest
+    container: ghcr.io/rust-cross/cargo-zigbuild:0.20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - run: rustup target add aarch64-apple-darwin
+      - run: rustup target add x86_64-apple-darwin
+      - name: Build
+        run: cargo build --verbose --target universal2-apple-darwin
+      - name: Build release binary
+        run: cargo build --release --target universal2-apple-darwin
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CI builds (macos)
+          path: |
+            target/**/ornithe-installer-rs*
+            !target/**/ornithe-installer-rs.d
+            !target/**/build/
+  build_linux_cross:
+    strategy:
+      matrix:
+        include:
+          - build: linux-aarch64
+            target: aarch64-unknown-linux-gnu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-cross
+      - run: cargo install cross --git https://github.com/cross-rs/cross
+      - run: rustup target add ${{ matrix.target }}
+      - name: Build
+        run: cross build --verbose --target ${{ matrix.target }}
+      - name: Build release binary
+        run: cross build --release --target ${{ matrix.target }}
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v4
         with:
