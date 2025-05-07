@@ -104,9 +104,11 @@ jobs:
       - run: rustup target add aarch64-apple-darwin
       - run: rustup target add x86_64-apple-darwin
       - run: cargo build --release --target universal2-apple-darwin
-      - run: mv "target/aarch64-apple-darwin/release/ornithe-installer-rs" "target/aarch64-apple-darwin/release/ornithe-installer-rs.bin"
-      - run: mv "target/x86_64-apple-darwin/release/ornithe-installer-rs" "target/x86_64-apple-darwin/release/ornithe-installer-rs.bin"
-      - run: mv "target/universal2-apple-darwin/release/ornithe-installer-rs" "target/universal2-apple-darwin/release/ornithe-installer-rs.bin"
+      - name: Rename Binaries
+        run: |
+          mv "target/aarch64-apple-darwin/release/ornithe-installer-rs" "target/aarch64-apple-darwin/release/ornithe-installer-rs.bin"
+          mv "target/x86_64-apple-darwin/release/ornithe-installer-rs" "target/x86_64-apple-darwin/release/ornithe-installer-rs.bin"
+          mv "target/universal2-apple-darwin/release/ornithe-installer-rs" "target/universal2-apple-darwin/release/ornithe-installer-rs.bin"
       - uses: actions/upload-artifact@v4
         with:
           name: Artifacts ${{ matrix.target }}
