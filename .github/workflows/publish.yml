@@ -13,6 +13,7 @@ jobs:
   publish:
     strategy:
       matrix:
+        build: [linux-x86_64, windows-x86, windows-x86_64, windows-aarch64]
         include:
           - build: linux-x86_64
             os: ubuntu-latest
@@ -157,6 +158,7 @@ jobs:
   publish_linux_cross:
     strategy:
       matrix:
+        build: [linux-aarch64]
         include:
           - build: linux-aarch64
             target: aarch64-unknown-linux-gnu

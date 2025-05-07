@@ -92,6 +92,7 @@ jobs:
   build_linux_cross:
     strategy:
       matrix:
+        build: [linux-aarch64]
         include:
           - build: linux-aarch64
             target: aarch64-unknown-linux-gnu
