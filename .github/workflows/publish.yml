@@ -13,28 +13,31 @@ jobs:
   publish:
     strategy:
       matrix:
+        build: [linux-x86_64, windows-x86, windows-x86_64, windows-aarch64]
         include:
-          - build: linux-x86
+          - build: linux-x86_64
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
           - build: windows-x86
             os: windows-latest
+            target: i686-pc-windows-msvc
+            msvc_arch: amd64_x86
+          - build: windows-x86_64
+            os: windows-latest
             target: x86_64-pc-windows-msvc
-          #- build: windows-i686
-          #  os: windows-latest
-          #  target: i686-pc-windows-msvc
-          #- build: windows-aarch64
-          #  os: windows-latest
-          #  target: aarch64-pc-windows-msvc
-          #- build: macos-x86
-          #  os: macos-latest
-          #  target: x86_64-apple-darwin
-          - build: macos-aarch64
-            os: macos-latest
-            target: aarch64-apple-darwin
+            msvc_arch: amd64
+          - build: windows-aarch64
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            msvc_arch: amd64_arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Install C toolchain (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
       - name: Install packages (Linux)
         if: runner.os == 'Linux'
         uses: awalsh128/cache-apt-pkgs-action@v1.4.3
@@ -53,6 +56,8 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.build }}
       - run: rustup target add ${{ matrix.target }}
         # Build the CLI only binary
       - run: cargo build --no-default-features --release --target ${{ matrix.target }}
@@ -76,10 +81,122 @@ jobs:
           MAVEN_URL: ${{ secrets.NEW_MAVEN_URL }}
           MAVEN_USERNAME: ${{ secrets.NEW_MAVEN_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.NEW_MAVEN_PASSWORD }}
+          SNAPSHOTS_URL: ${{ secrets.NEW_MAVEN_SNAPSHOT_URL }}
+          SNAPSHOTS_USERNAME: ${{ secrets.NEW_MAVEN_SNAPSHOT_USERNAME }}
+          SNAPSHOTS_PASSWORD: ${{ secrets.NEW_MAVEN_SNAPSHOT_PASSWORD }}
           TARGET: ${{ matrix.target }}
           OS: ${{ matrix.build }}
+  publish_macos:
+    runs-on: ubuntu-latest
+    container: ghcr.io/rust-cross/cargo-zigbuild:0.20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "microsoft"
+          java-version: "21"
+          cache: "gradle"
+      - uses: gradle/actions/wrapper-validation@v3
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - run: rustup target add aarch64-apple-darwin
+      - run: rustup target add x86_64-apple-darwin
+        # Build the CLI only binary
+      - run: cargo zigbuild --no-default-features --release --target universal2-apple-darwin
+      - name: Rename CLI Binaries
+        run: |
+          mv "target/aarch64-apple-darwin/release/ornithe-installer-rs" "target/aarch64-apple-darwin/release/ornithe-installer-rs-cli.bin"
+          mv "target/x86_64-apple-darwin/release/ornithe-installer-rs" "target/x86_64-apple-darwin/release/ornithe-installer-rs-cli.bin"
+          mv "target/universal2-apple-darwin/release/ornithe-installer-rs" "target/universal2-apple-darwin/release/ornithe-installer-rs-cli.bin"
+        # Regular build with GUI
+      - run: cargo zigbuild --release --target universal2-apple-darwin
+      - name: Rename Binaries
+        run: |
+          mv "target/aarch64-apple-darwin/release/ornithe-installer-rs" "target/aarch64-apple-darwin/release/ornithe-installer-rs.bin"
+          mv "target/x86_64-apple-darwin/release/ornithe-installer-rs" "target/x86_64-apple-darwin/release/ornithe-installer-rs.bin"
+          mv "target/universal2-apple-darwin/release/ornithe-installer-rs" "target/universal2-apple-darwin/release/ornithe-installer-rs.bin"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Artifacts macos
+          path: |
+            target/**/release/ornithe-installer-rs*
+            !target/**/ornithe-installer-rs.d
+            !target/**/build/
       - run: ./gradlew publish --stacktrace
         env:
+          MAVEN_URL: ${{ secrets.NEW_MAVEN_URL }}
+          MAVEN_USERNAME: ${{ secrets.NEW_MAVEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.NEW_MAVEN_PASSWORD }}
+          SNAPSHOTS_URL: ${{ secrets.NEW_MAVEN_SNAPSHOT_URL }}
+          SNAPSHOTS_USERNAME: ${{ secrets.NEW_MAVEN_SNAPSHOT_USERNAME }}
+          SNAPSHOTS_PASSWORD: ${{ secrets.NEW_MAVEN_SNAPSHOT_PASSWORD }}
+          TARGET: aarch64-apple-darwin
+          OS: macos-aarch64
+      - run: ./gradlew publish --stacktrace
+        env:
+          MAVEN_URL: ${{ secrets.NEW_MAVEN_URL }}
+          MAVEN_USERNAME: ${{ secrets.NEW_MAVEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.NEW_MAVEN_PASSWORD }}
+          SNAPSHOTS_URL: ${{ secrets.NEW_MAVEN_SNAPSHOT_URL }}
+          SNAPSHOTS_USERNAME: ${{ secrets.NEW_MAVEN_SNAPSHOT_USERNAME }}
+          SNAPSHOTS_PASSWORD: ${{ secrets.NEW_MAVEN_SNAPSHOT_PASSWORD }}
+          TARGET: x86_64-apple-darwin
+          OS: macos-x86_64
+      - run: ./gradlew publish --stacktrace
+        env:
+          MAVEN_URL: ${{ secrets.NEW_MAVEN_URL }}
+          MAVEN_USERNAME: ${{ secrets.NEW_MAVEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.NEW_MAVEN_PASSWORD }}
+          SNAPSHOTS_URL: ${{ secrets.NEW_MAVEN_SNAPSHOT_URL }}
+          SNAPSHOTS_USERNAME: ${{ secrets.NEW_MAVEN_SNAPSHOT_USERNAME }}
+          SNAPSHOTS_PASSWORD: ${{ secrets.NEW_MAVEN_SNAPSHOT_PASSWORD }}
+          TARGET: universal2-apple-darwin
+          OS: macos-universal2
+  publish_linux_cross:
+    strategy:
+      matrix:
+        build: [linux-aarch64]
+        include:
+          - build: linux-aarch64
+            target: aarch64-unknown-linux-gnu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "microsoft"
+          java-version: "21"
+          cache: "gradle"
+      - uses: gradle/actions/wrapper-validation@v3
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-cross
+      - run: cargo install cross --git https://github.com/cross-rs/cross
+        # Build the CLI only binary
+      - run: cross build --no-default-features --release --target ${{ matrix.target }}
+      - run: mv "target/${{ matrix.target }}/release/ornithe-installer-rs" "target/${{ matrix.target }}/release/ornithe-installer-rs-cli.bin"
+        # Regular build with GUI
+      - run: cross build --release --target ${{ matrix.target }}
+      - run: mv "target/${{ matrix.target }}/release/ornithe-installer-rs" "target/${{ matrix.target }}/release/ornithe-installer-rs.bin"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Artifacts ${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/ornithe-installer-rs*
+            !target/**/ornithe-installer-rs.d
+            !target/**/build/
+      - run: ./gradlew publish --stacktrace
+        env:
+          MAVEN_URL: ${{ secrets.NEW_MAVEN_URL }}
+          MAVEN_USERNAME: ${{ secrets.NEW_MAVEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.NEW_MAVEN_PASSWORD }}
           SNAPSHOTS_URL: ${{ secrets.NEW_MAVEN_SNAPSHOT_URL }}
           SNAPSHOTS_USERNAME: ${{ secrets.NEW_MAVEN_SNAPSHOT_USERNAME }}
           SNAPSHOTS_PASSWORD: ${{ secrets.NEW_MAVEN_SNAPSHOT_PASSWORD }}
