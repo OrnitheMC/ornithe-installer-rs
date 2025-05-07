@@ -104,14 +104,14 @@ jobs:
       - run: rustup target add aarch64-apple-darwin
       - run: rustup target add x86_64-apple-darwin
         # Build the CLI only binary
-      - run: cargo build --no-default-features --release --target universal2-apple-darwin
+      - run: cargo zigbuild --no-default-features --release --target universal2-apple-darwin
       - name: Rename CLI Binaries
         run: |
           mv "target/aarch64-apple-darwin/release/ornithe-installer-rs" "target/aarch64-apple-darwin/release/ornithe-installer-rs-cli.bin"
           mv "target/x86_64-apple-darwin/release/ornithe-installer-rs" "target/x86_64-apple-darwin/release/ornithe-installer-rs-cli.bin"
           mv "target/universal2-apple-darwin/release/ornithe-installer-rs" "target/universal2-apple-darwin/release/ornithe-installer-rs-cli.bin"
         # Regular build with GUI
-      - run: cargo build --release --target universal2-apple-darwin
+      - run: cargo zigbuild --release --target universal2-apple-darwin
       - name: Rename Binaries
         run: |
           mv "target/aarch64-apple-darwin/release/ornithe-installer-rs" "target/aarch64-apple-darwin/release/ornithe-installer-rs.bin"
