@@ -129,12 +129,15 @@ impl MinecraftVersion {
     pub async fn get_jar_download_url(
         &self,
         side: &GameSide,
-    ) -> Result<VersionDownload, reqwest::Error> {
+    ) -> Result<VersionDownload, InstallerError> {
         let downloads = fetch_version_details(self).await?.downloads;
-        Ok(match side {
+        match side {
             GameSide::Client => downloads.client,
             GameSide::Server => downloads.server,
-        })
+        }
+        .ok_or(InstallerError(
+            "Version does not have download for side ".to_owned() + side.id(),
+        ))
     }
 
     pub fn is_snapshot(&self) -> bool {
@@ -163,8 +166,8 @@ pub struct VersionDetails {
 
 #[derive(Deserialize)]
 struct VersionDownloads {
-    client: VersionDownload,
-    server: VersionDownload,
+    client: Option<VersionDownload>,
+    server: Option<VersionDownload>,
 }
 
 #[allow(dead_code)]
