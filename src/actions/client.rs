@@ -20,17 +20,17 @@ pub async fn install(
     location: PathBuf,
     create_profile: bool,
 ) -> Result<(), InstallerError> {
+    let location = location.canonicalize()?;
     if !location.exists() {
         std::fs::create_dir_all(&location)?;
     }
-    let location = location.canonicalize()?;
     info!(
         "Installing Minecraft client at {}",
         location.to_str().unwrap_or("<not representable>")
     );
 
     info!("Fetching launch jsons..");
-    let vanilla_launch_json = manifest::fetch_launch_json(&version).await?;
+    let (vanilla_profile_name, vanilla_launch_json) = manifest::fetch_launch_json(&version).await?;
 
     let (profile_name, ornithe_launch_json) = meta::fetch_launch_json(
         crate::net::GameSide::Client,
@@ -41,8 +41,6 @@ pub async fn install(
     .await?;
 
     info!("Setting up destination..");
-
-    let vanilla_profile_name = version.id.to_string() + "-vanilla";
 
     let versions_dir = location.join("versions");
     let vanilla_profile_dir = versions_dir.join(&vanilla_profile_name);
@@ -59,14 +57,11 @@ pub async fn install(
 
     info!("Creating files..");
 
-    create_empty_jar(&vanilla_profile_dir, &vanilla_profile_name)?;
-    create_empty_jar(&profile_dir, &profile_name)?;
+    std::fs::create_dir_all(vanilla_profile_dir)?;
+    std::fs::create_dir_all(profile_dir)?;
 
     std::fs::write(vanilla_profile_json, vanilla_launch_json)?;
-    std::fs::write(
-        profile_json,
-        serde_json::to_string_pretty(&ornithe_launch_json)?,
-    )?;
+    std::fs::write(profile_json, serde_json::to_string(&ornithe_launch_json)?)?;
 
     if create_profile {
         update_profiles(location, profile_name, version, loader_type)?;
@@ -75,10 +70,18 @@ pub async fn install(
     Ok(())
 }
 
-fn create_empty_jar(dir: &PathBuf, name: &String) -> Result<(), InstallerError> {
-    std::fs::create_dir_all(dir)?;
-    std::fs::File::create(dir.join(name.clone() + ".jar"))?;
-    Ok(())
+fn get_launcher_profiles_json(game_dir: PathBuf) -> Result<PathBuf, InstallerError> {
+    let launcher_profiles_msstore = game_dir.join("launcher_profiles_microsoft_store.json");
+    if launcher_profiles_msstore.exists() {
+        return Ok(launcher_profiles_msstore);
+    }
+    let launcher_profiles = game_dir.join("launcher_profiles.json");
+    if launcher_profiles.exists() {
+        return Ok(launcher_profiles);
+    }
+    Err(InstallerError(
+        "Could not find a launcher_profiles json!".to_string(),
+    ))
 }
 
 fn update_profiles(
@@ -87,7 +90,7 @@ fn update_profiles(
     version: MinecraftVersion,
     loader_type: LoaderType,
 ) -> Result<(), InstallerError> {
-    let launcher_profiles_path = game_dir.join("launcher_profiles.json");
+    let launcher_profiles_path = get_launcher_profiles_json(game_dir)?;
 
     match std::fs::read_to_string(launcher_profiles_path.clone()) {
         Ok(launcher_profiles) => match serde_json::from_str::<Value>(&launcher_profiles) {

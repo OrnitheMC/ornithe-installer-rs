@@ -19,7 +19,9 @@ pub async fn fetch_versions() -> Result<VersionManifest, InstallerError> {
         .map_err(|e| e.into())
 }
 
-pub async fn fetch_launch_json(version: &MinecraftVersion) -> Result<String, InstallerError> {
+pub async fn fetch_launch_json(
+    version: &MinecraftVersion,
+) -> Result<(String, String), InstallerError> {
     let res = super::CLIENT
         .get(VERSION_META_URL.replace("{}", version.id.as_str()))
         .send()
@@ -40,14 +42,23 @@ pub async fn fetch_launch_json(version: &MinecraftVersion) -> Result<String, Ins
             }
         }
 
-        val.insert(
-            "id".to_string(),
-            Value::String(format!("{}-vanilla", version.id.clone())),
-        );
+        if let Some(libraries) = val.get_mut("libraries") {
+            libraries
+                .as_array_mut()
+                .ok_or(InstallerError("Libraries should be an array".to_string()))?
+                .retain(|lib| {
+                    lib["name"].as_str().unwrap_or_default() != "org.ow2.asm:asm-all:4.1"
+                });
+        }
 
-        return Ok(serde_json::to_string_pretty(val)?);
+        let version_id = format!("{}-vanilla", version.id.clone());
+        val.insert("id".to_string(), Value::String(version_id.clone()));
+
+        return Ok((version_id, serde_json::to_string(val)?));
     }
-    Err(InstallerError("Error".to_string()))
+    Err(InstallerError(
+        "Error while fetching launch json from manifest".to_string(),
+    ))
 }
 
 fn build_version_json_from_manifest(

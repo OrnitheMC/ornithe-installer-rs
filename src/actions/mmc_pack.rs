@@ -206,7 +206,8 @@ async fn get_mmc_launch_json(
     lwjgl_version: &String,
 ) -> Result<String, InstallerError> {
     let client_name = format!("com.mojang:minecraft:{}:client", version.id);
-    let vanilla_json = serde_json::from_str::<Value>(&manifest::fetch_launch_json(version).await?)?;
+    let (_, vanilla_launch_json) = manifest::fetch_launch_json(version).await?;
+    let vanilla_json = serde_json::from_str::<Value>(&vanilla_launch_json)?;
 
     let client = vanilla_json["downloads"]["client"].as_object().unwrap();
 
