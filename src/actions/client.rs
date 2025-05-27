@@ -32,7 +32,7 @@ pub async fn install(
     info!("Fetching launch jsons..");
     let vanilla_launch_json = manifest::fetch_launch_json(&version).await?;
 
-    let ornithe_launch_json = meta::fetch_launch_json(
+    let (profile_name, ornithe_launch_json) = meta::fetch_launch_json(
         crate::net::GameSide::Client,
         &version,
         &loader_type,
@@ -43,12 +43,6 @@ pub async fn install(
     info!("Setting up destination..");
 
     let vanilla_profile_name = version.id.to_string() + "-vanilla";
-    let profile_name = format!(
-        "{}-loader-{}-{}-ornithe",
-        loader_type.get_name(),
-        loader_version.version,
-        version.id
-    );
 
     let versions_dir = location.join("versions");
     let vanilla_profile_dir = versions_dir.join(&vanilla_profile_name);
@@ -69,7 +63,10 @@ pub async fn install(
     create_empty_jar(&profile_dir, &profile_name)?;
 
     std::fs::write(vanilla_profile_json, vanilla_launch_json)?;
-    std::fs::write(profile_json, ornithe_launch_json)?;
+    std::fs::write(
+        profile_json,
+        serde_json::to_string_pretty(&ornithe_launch_json)?,
+    )?;
 
     if create_profile {
         update_profiles(location, profile_name, version, loader_type)?;

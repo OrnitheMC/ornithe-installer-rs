@@ -6,7 +6,6 @@ use std::{
 };
 
 use log::info;
-use serde_json::Value;
 use tokio::task::JoinSet;
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
@@ -72,7 +71,7 @@ async fn install_path(
         }
     }
 
-    let launch_json_str = crate::net::meta::fetch_launch_json(
+    let (_, launch_json) = crate::net::meta::fetch_launch_json(
         crate::net::GameSide::Server,
         version,
         loader_type,
@@ -81,8 +80,6 @@ async fn install_path(
     .await?;
 
     info!("Installing libraries");
-
-    let launch_json = serde_json::from_str::<Value>(&launch_json_str)?;
 
     if !launch_json.is_object() {
         return Err(InstallerError(

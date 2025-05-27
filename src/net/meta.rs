@@ -81,7 +81,7 @@ pub async fn fetch_launch_json(
     version: &MinecraftVersion,
     loader_type: &LoaderType,
     loader_version: &LoaderVersion,
-) -> Result<String, InstallerError> {
+) -> Result<(String, Value), InstallerError> {
     let mut text = super::CLIENT
         .get(
             META_URL.to_owned()
@@ -95,6 +95,12 @@ pub async fn fetch_launch_json(
         .await?
         .json::<Value>()
         .await?;
+    let version_id = text["id"]
+        .as_str()
+        .ok_or(InstallerError(
+            "Launch Json does not contain 'id' key!".to_string(),
+        ))?
+        .to_owned();
     if let Some(libraries) = text["libraries"].as_object_mut() {
         for lib in libraries {
             let lib_mut = lib.1.as_object_mut().unwrap();
@@ -130,7 +136,7 @@ pub async fn fetch_launch_json(
             }
         }
     }
-    Ok(serde_json::to_string_pretty(&text)?)
+    Ok((version_id, text))
 }
 
 pub async fn fetch_loader_versions()
