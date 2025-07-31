@@ -1,13 +1,12 @@
 [package]
 name = "ornithe-installer-rs"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2024"
 authors = [
     "moehreag"
 ]
 
 [dependencies]
-anyhow = "1.0.97"
 base64 = "0.22.1"
 chrono = { version = "0.4.40", features = ["serde"] }
 clap = { version = "4.5.35", features = ["cargo", "derive", "string"] }
@@ -23,7 +22,7 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.140", features = ["preserve_order"] }
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
 webbrowser = { version = "1.0.4", optional = true }
-zip = { version = "2.6.1", features = ["deflate-flate2"] }
+zip = { version = "4.3.0", features = ["deflate-flate2"] }
 
 [features]
 default = ["gui"]
@@ -31,7 +30,7 @@ default = ["gui"]
 gui = ["dep:eframe", "dep:egui", "dep:egui-dropdown", "dep:rfd", "dep:webbrowser"]
 
 [build-dependencies]
-embed-resource = "1.6.0"
+embed-resource = "3.0.5"
 winres = "0.1.11"
 
 [profile.release]

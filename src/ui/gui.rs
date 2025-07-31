@@ -261,22 +261,28 @@ impl App {
     fn add_loader(&mut self, ui: &mut egui::Ui) {
         ui.label("Loader");
         ui.horizontal(|ui| {
-            ComboBox::from_id_salt("loader_type")
+            let loader_type_response = ComboBox::from_id_salt("loader_type")
                 .selected_text(format!(
                     "{} Loader",
                     &self.selected_loader_type.get_localized_name()
                 ))
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(
-                        &mut self.selected_loader_type,
-                        LoaderType::Fabric,
-                        "Fabric Loader",
-                    );
-                    ui.selectable_value(
-                        &mut self.selected_loader_type,
-                        LoaderType::Quilt,
-                        "Quilt Loader",
-                    );
+                    let mut changed = false;
+                    changed |= ui
+                        .selectable_value(
+                            &mut self.selected_loader_type,
+                            LoaderType::Fabric,
+                            "Fabric Loader",
+                        )
+                        .changed();
+                    changed |= ui
+                        .selectable_value(
+                            &mut self.selected_loader_type,
+                            LoaderType::Quilt,
+                            "Quilt Loader",
+                        )
+                        .changed();
+                    changed
                 });
 
             ui.label("Version: ");
@@ -306,6 +312,7 @@ impl App {
                 .find(|v| v.version == self.selected_loader_version)
                 .is_some()
                 || checkbox_response.clicked()
+                || loader_type_response.inner.is_some_and(|t| t)
             {
                 self.selected_loader_version = self
                     .available_loader_versions

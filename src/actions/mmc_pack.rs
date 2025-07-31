@@ -151,6 +151,10 @@ pub async fn install(
         &serde_json::to_vec_pretty(&transformed_pack_json)?,
     )?;
 
+    #[cfg(all(
+        any(unix, target_os = "windows"),
+        not(any(target_os = "android", target_os = "emscripten"))
+    ))]
     if copy_profile_path {
         cli_clipboard::set_contents(output_file.to_string_lossy().into_owned())
             .map_err(|_| InstallerError("Failed to copy profile path".to_owned()))?;
