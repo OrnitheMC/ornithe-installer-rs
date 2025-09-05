@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::errors::InstallerError;
@@ -58,13 +58,6 @@ impl LoaderType {
             LoaderType::Quilt => "org.quiltmc.quilt-loader",
         }
     }
-
-    pub fn get_maven_name_start(&self) -> &str {
-        match self {
-            LoaderType::Fabric => "net.fabricmc:fabric-loader",
-            LoaderType::Quilt => "org.quiltmc:quilt-loader",
-        }
-    }
 }
 
 impl GameSide {
@@ -101,9 +94,23 @@ pub async fn fetch_launch_json(
             "Launch Json does not contain 'id' key!".to_string(),
         ))?
         .to_owned();
-    if let Some(libraries) = text["libraries"].as_object_mut() {
-        for lib in libraries {
-            let lib_mut = lib.1.as_object_mut().unwrap();
+
+    let library_upgrades = super::CLIENT
+        .get(
+            META_URL.to_owned()
+                + &format!(
+                    "/v3/versions/libraries/{}",
+                    version.get_id(&side).await?.as_str()
+                ),
+        )
+        .send()
+        .await?
+        .json::<Vec<ProfileJsonLibrary>>()
+        .await?;
+
+    if let Some(libraries) = text["libraries"].as_array_mut() {
+        for lib in &mut *libraries {
+            let lib_mut = lib.as_object_mut().unwrap();
             if let Some(name) = lib_mut.clone()["name"].as_str() {
                 if name.starts_with("net.fabricmc:intermediary") {
                     lib_mut.insert(
@@ -134,6 +141,9 @@ pub async fn fetch_launch_json(
                     );
                 }
             }
+        }
+        for upgrade in library_upgrades {
+            libraries.push(serde_json::to_value(upgrade)?);
         }
     }
     Ok((version_id, text))
@@ -200,7 +210,7 @@ struct ProfileJson {
     libraries: Vec<ProfileJsonLibrary>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct ProfileJsonLibrary {
     pub name: String,
     pub url: String,
@@ -208,37 +218,13 @@ pub struct ProfileJsonLibrary {
 
 pub async fn fetch_profile_libraries(
     version: &IntermediaryVersion,
-    loader_type: &LoaderType,
-    loader_version: &LoaderVersion,
 ) -> Result<Vec<ProfileJsonLibrary>, InstallerError> {
-    let profile = super::CLIENT
-        .get(
-            META_URL.to_owned()
-                + &format!(
-                    "/v3/versions/{}-loader/{}/{}/profile/json",
-                    loader_type.get_name(),
-                    version.version,
-                    loader_version.version
-                ),
-        )
+    let library_upgrades = super::CLIENT
+        .get(META_URL.to_owned() + &format!("/v3/versions/libraries/{}", version.version))
         .send()
         .await?
-        .json::<ProfileJson>()
+        .json::<Vec<ProfileJsonLibrary>>()
         .await?;
 
-    let mut out = Vec::new();
-    let mut loader_found = false;
-
-    for lib in profile.libraries {
-        if loader_found {
-            out.push(lib);
-            continue;
-        }
-
-        if lib.name.starts_with(loader_type.get_maven_name_start()) {
-            loader_found = true;
-        }
-    }
-
-    Ok(out)
+    Ok(library_upgrades)
 }
