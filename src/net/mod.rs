@@ -35,10 +35,17 @@ pub enum GameSide {
 }
 
 impl GameSide {
-    fn id(&self) -> &str {
+    pub fn id(&self) -> &str {
         match self {
             GameSide::Client => "client",
             GameSide::Server => "server",
+        }
+    }
+
+    pub fn other_side(&self) -> GameSide {
+        match self {
+            GameSide::Client => GameSide::Server,
+            GameSide::Server => GameSide::Client,
         }
     }
 }

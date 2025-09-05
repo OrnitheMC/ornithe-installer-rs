@@ -86,6 +86,7 @@ struct App {
     selected_minecraft_version: String,
     available_minecraft_versions: Vec<MinecraftVersion>,
     available_intermediary_versions: Vec<String>,
+    filtered_minecraft_versions: Vec<String>,
     show_snapshots: bool,
     show_historical: bool,
     selected_loader_type: LoaderType,
@@ -138,11 +139,12 @@ impl App {
             available_loader_versions = versions;
         }
 
-        let app = App {
+        let mut app = App {
             mode: Mode::Client,
             selected_minecraft_version: String::new(),
             available_minecraft_versions,
             available_intermediary_versions,
+            filtered_minecraft_versions: Vec::new(),
             show_snapshots: false,
             show_historical: false,
             selected_loader_type: LoaderType::Fabric,
@@ -163,6 +165,7 @@ impl App {
             file_picker_open: false,
             installation_task: None,
         };
+        app.filter_minecraft_versions();
         Ok(app)
     }
 
@@ -205,9 +208,18 @@ impl App {
     fn add_environment_options(&mut self, ui: &mut egui::Ui) {
         ui.label("Environment");
         ui.horizontal(|ui| {
-            ui.radio_value(&mut self.mode, Mode::Client, "Client (Official Launcher)");
-            ui.radio_value(&mut self.mode, Mode::MMC, "MultiMC/PrismLauncher");
-            ui.radio_value(&mut self.mode, Mode::Server, "Server");
+            if ui
+                .radio_value(&mut self.mode, Mode::Client, "Client (Official Launcher)")
+                .clicked()
+                || ui
+                    .radio_value(&mut self.mode, Mode::MMC, "MultiMC/PrismLauncher")
+                    .clicked()
+                || ui
+                    .radio_value(&mut self.mode, Mode::Server, "Server")
+                    .clicked()
+            {
+                self.filter_minecraft_versions();
+            }
         });
     }
 
@@ -216,35 +228,7 @@ impl App {
         ui.horizontal(|ui| {
             ui.add(
                 DropDownBox::from_iter(
-                    &self
-                        .available_minecraft_versions
-                        .iter()
-                        .filter(|v| {
-                            self.available_intermediary_versions.contains(&v.id)
-                                || self.available_intermediary_versions.contains(
-                                    &(v.id.clone()
-                                        + "-"
-                                        + match self.mode {
-                                            Mode::Server => "server",
-                                            _ => "client",
-                                        }),
-                                )
-                        })
-                        .filter(|v| {
-                            if self.show_snapshots && self.show_historical {
-                                return true;
-                            }
-                            let mut displayed = v.is_release();
-                            if !displayed && self.show_snapshots {
-                                displayed = v.is_snapshot();
-                            }
-                            if !displayed && self.show_historical {
-                                displayed = v.is_historical();
-                            }
-                            displayed
-                        })
-                        .map(|v| v.id.clone())
-                        .collect::<Vec<String>>(),
+                    &self.filtered_minecraft_versions,
                     "minecraft_version",
                     &mut self.selected_minecraft_version,
                     |ui, text| ui.selectable_label(false, text),
@@ -253,9 +237,46 @@ impl App {
                 .desired_width(170.0)
                 .hint_text("Search available versions..."),
             );
-            ui.checkbox(&mut self.show_snapshots, "Snapshots");
-            ui.checkbox(&mut self.show_historical, "Historical Versions");
+            if ui.checkbox(&mut self.show_snapshots, "Snapshots").clicked()
+                || ui
+                    .checkbox(&mut self.show_historical, "Historical Versions")
+                    .clicked()
+            {
+                self.filter_minecraft_versions();
+            }
         });
+    }
+
+    fn filter_minecraft_versions(&mut self) {
+        self.filtered_minecraft_versions = self
+            .available_minecraft_versions
+            .iter()
+            .filter(|v| {
+                self.available_intermediary_versions.contains(&v.id)
+                    || self.available_intermediary_versions.contains(
+                        &(v.id.clone()
+                            + "-"
+                            + match self.mode {
+                                Mode::Server => "server",
+                                _ => "client",
+                            }),
+                    )
+            })
+            .filter(|v| {
+                if self.show_snapshots && self.show_historical {
+                    return true;
+                }
+                let mut displayed = v.is_release();
+                if !displayed && self.show_snapshots {
+                    displayed = v.is_snapshot();
+                }
+                if !displayed && self.show_historical {
+                    displayed = v.is_historical();
+                }
+                displayed
+            })
+            .map(|v| v.id.clone())
+            .collect::<Vec<String>>();
     }
 
     fn add_loader(&mut self, ui: &mut egui::Ui) {

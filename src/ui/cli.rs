@@ -1,4 +1,4 @@
-use std::{io::Write, path::PathBuf};
+use std::{collections::HashMap, io::Write, path::PathBuf};
 
 use clap::{ArgMatches, Command, arg, command, value_parser};
 use log::info;
@@ -6,8 +6,9 @@ use log::info;
 use crate::{
     errors::InstallerError,
     net::{
+        GameSide,
         manifest::MinecraftVersion,
-        meta::{LoaderType, LoaderVersion},
+        meta::{IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
 
@@ -182,7 +183,12 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
     let loader_versions = crate::net::meta::fetch_loader_versions().await?;
 
     if let Some(matches) = matches.subcommand_matches("client") {
-        let minecraft_version = get_minecraft_version(matches, available_minecraft_versions)?;
+        let minecraft_version = get_minecraft_version(
+            matches,
+            available_minecraft_versions,
+            intermediary_versions,
+            GameSide::Client,
+        )?;
         let loader_type = get_loader_type(matches)?;
         let loader_versions = loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
@@ -200,7 +206,12 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
     }
 
     if let Some(matches) = matches.subcommand_matches("server") {
-        let minecraft_version = get_minecraft_version(matches, available_minecraft_versions)?;
+        let minecraft_version = get_minecraft_version(
+            matches,
+            available_minecraft_versions,
+            intermediary_versions,
+            GameSide::Server,
+        )?;
         let loader_type = get_loader_type(matches)?;
         let loader_versions = loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
@@ -231,7 +242,12 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
     }
 
     if let Some(matches) = matches.subcommand_matches("mmc") {
-        let minecraft_version = get_minecraft_version(matches, available_minecraft_versions)?;
+        let minecraft_version = get_minecraft_version(
+            matches,
+            available_minecraft_versions,
+            intermediary_versions,
+            GameSide::Client,
+        )?;
         let loader_type = get_loader_type(matches)?;
         let loader_versions = loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
@@ -259,12 +275,31 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
 fn get_minecraft_version(
     matches: &ArgMatches,
     versions: Vec<MinecraftVersion>,
+    intermediary_versions: HashMap<String, IntermediaryVersion>,
+    side: GameSide,
 ) -> Result<MinecraftVersion, InstallerError> {
     let minecraft_version_arg = matches.get_one::<String>("minecraft-version").unwrap();
 
     for version in versions {
         if version.id == *minecraft_version_arg {
-            return Ok(version);
+            if intermediary_versions.contains_key(&version.id)
+                || intermediary_versions.contains_key(&(version.id.to_owned() + "-" + side.id()))
+            {
+                return Ok(version);
+            } else if !intermediary_versions.contains_key(&version.id)
+                && intermediary_versions
+                    .contains_key(&(version.id.to_owned() + "-" + side.other_side().id()))
+            {
+                return Err(InstallerError(
+                    "Cannot install ".to_owned()
+                        + minecraft_version_arg
+                        + " for the "
+                        + side.id()
+                        + "! This version is "
+                        + side.other_side().id()
+                        + "-only!",
+                ));
+            }
         }
     }
     Err(InstallerError(
