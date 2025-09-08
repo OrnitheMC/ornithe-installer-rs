@@ -242,6 +242,7 @@ async fn get_mmc_launch_json(
         .as_str()
         .unwrap_or("")
         .to_owned();
+
     if let Some(game_arguments) = vanilla_json["arguments"]["game"].as_array() {
         if !game_arguments.is_empty() {
             let mut combined = String::new();
@@ -284,6 +285,12 @@ async fn get_mmc_launch_json(
         json.as_object_mut()
             .unwrap()
             .insert("+traits".to_owned(), json!(traits));
+    }
+
+    if let Some(jvm_arguments) = vanilla_json["arguments"]["jvm"].as_array() {
+        json.as_object_mut()
+            .unwrap()
+            .insert("+jvmArgs".to_owned(), json!(jvm_arguments));
     }
 
     Ok(serde_json::to_string_pretty(&json)?)
