@@ -134,10 +134,18 @@ impl App {
             "Loaded {} Minecraft versions",
             available_minecraft_versions.len()
         );
+        info!(
+            "Loaded {} Intermediary versions",
+            available_intermediary_versions.len()
+        );
 
         if let Ok(versions) = net::meta::fetch_loader_versions().await {
             available_loader_versions = versions;
         }
+        info!(
+            "Loaded versions for {} loaders",
+            available_loader_versions.len()
+        );
 
         let mut app = App {
             mode: Mode::Client,
@@ -277,6 +285,11 @@ impl App {
             })
             .map(|v| v.id.clone())
             .collect::<Vec<String>>();
+        info!(
+            "Filtered {} valid minecraft versions to display out of {} total",
+            self.filtered_minecraft_versions.len(),
+            self.available_minecraft_versions.len()
+        );
     }
 
     fn add_loader(&mut self, ui: &mut egui::Ui) {
