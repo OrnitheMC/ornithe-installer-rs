@@ -17,8 +17,6 @@ pub struct LoaderVersion {
     maven: String,
     separator: String,
     build: i32,
-    #[serde(rename(deserialize = "versionNoSide"))]
-    version_no_side: String,
 }
 
 impl LoaderVersion {
@@ -183,8 +181,6 @@ pub struct IntermediaryVersion {
     pub version: String,
     stable: bool,
     pub maven: String,
-    #[serde(rename(deserialize = "versionNoSide"))]
-    pub version_no_side: String,
 }
 
 pub async fn fetch_intermediary_versions()
