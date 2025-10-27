@@ -82,7 +82,8 @@ pub async fn install(
 
     info!("Fetching library information...");
 
-    let extra_libs = meta::fetch_profile_libraries(&intermediary_version).await?;
+    let extra_libs = meta::fetch_profile_libraries(&version.id).await?;
+    info!("Found {} library upgrade patches", extra_libs.len());
 
     let mut zip: Box<dyn Writer> = if generate_zip {
         info!("Generating instance zip...");

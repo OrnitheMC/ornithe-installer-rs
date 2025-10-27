@@ -213,10 +213,10 @@ pub struct ProfileJsonLibrary {
 }
 
 pub async fn fetch_profile_libraries(
-    version: &IntermediaryVersion,
+    version: &str,
 ) -> Result<Vec<ProfileJsonLibrary>, InstallerError> {
     let library_upgrades = super::CLIENT
-        .get(META_URL.to_owned() + &format!("/v3/versions/libraries/{}", version.version))
+        .get(META_URL.to_owned() + &format!("/v3/versions/libraries/{}", version))
         .send()
         .await?
         .json::<Vec<ProfileJsonLibrary>>()
