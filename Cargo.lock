@@ -2970,7 +2970,7 @@ dependencies = [
 
 [[package]]
 name = "ornithe-installer-rs"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "base64",
  "chrono",
