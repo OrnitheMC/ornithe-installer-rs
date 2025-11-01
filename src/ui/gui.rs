@@ -50,7 +50,13 @@ async fn create_window() -> Result<(), InstallerError> {
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
-    let app = App::create().await?;
+    let res = App::create().await;
+    if let Err(e) = res {
+        error!("{}", e.0);
+        display_dialog("Ornithe Installer Error", &e.0);
+        return Ok(());
+    }
+    let app = res.unwrap();
 
     eframe::run_native(
         &("Ornithe Installer ".to_owned() + crate::VERSION),
@@ -119,17 +125,25 @@ impl App {
         let mut available_minecraft_versions = Vec::new();
         let mut available_intermediary_versions = Vec::new();
         let mut available_loader_versions = HashMap::new();
+        let manifest_future = net::manifest::fetch_versions();
+        let intermediary_future = net::meta::fetch_intermediary_versions();
+        let loader_future = net::meta::fetch_loader_versions();
 
         info!("Loading versions...");
-        if let Ok(versions) = net::manifest::fetch_versions().await {
+        if let Ok(versions) = manifest_future.await {
             for ele in versions.versions {
                 available_minecraft_versions.push(ele);
             }
         }
-        if let Ok(versions) = net::meta::fetch_intermediary_versions().await {
+        if let Ok(versions) = intermediary_future.await {
             for v in versions.keys() {
                 available_intermediary_versions.push(v.clone());
             }
+        }
+        if available_minecraft_versions.len() == 0 {
+            return Err(InstallerError(
+                "Could not find any available Minecraft versions. Make sure you are connected to the internet!".to_string(),
+            ));
         }
         info!(
             "Loaded {} Minecraft versions",
@@ -140,7 +154,7 @@ impl App {
             available_intermediary_versions.len()
         );
 
-        if let Ok(versions) = net::meta::fetch_loader_versions().await {
+        if let Ok(versions) = loader_future.await {
             available_loader_versions = versions;
         }
         info!(

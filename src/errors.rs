@@ -6,7 +6,7 @@ pub struct InstallerError(pub String);
 #[cfg(feature = "gui")]
 impl From<eframe::Error> for InstallerError {
     fn from(value: eframe::Error) -> Self {
-        InstallerError(format!("{:?}", value))
+        InstallerError(format!("{}", value))
     }
 }
 
