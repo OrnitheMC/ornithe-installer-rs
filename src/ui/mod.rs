@@ -24,7 +24,15 @@ fn location(minecraft_path: Option<PathBuf>, default: &str) -> String {
 
 #[cfg(all(any(unix), not(target_os = "macos")))]
 pub fn dot_minecraft_location() -> String {
-    location(home_dir().map(|p| p.join(".minecraft")), "/")
+    let mc_dir = home_dir().map(|p| {
+        let dot_mc = p.join(".minecraft");
+        let flatpak_dot_mc = p.join(".var/app/com.mojang.Minecraft/.minecraft");
+        if flatpak_dot_mc.exists() && !dot_mc.exists() {
+            return flatpak_dot_mc;
+        }
+        dot_mc
+    });
+    location(mc_dir, "/")
 }
 
 #[cfg(target_os = "windows")]

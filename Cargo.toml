@@ -11,6 +11,7 @@ base64 = "0.22.1"
 chrono = { version = "0.4.40", features = ["serde"] }
 clap = { version = "4.5.35", features = ["cargo", "derive", "string"] }
 cli-clipboard = "0.4.0"
+# keep eframe and egui at 0.31.1 because of egui-dropdown, used for the minecraft version dropdown (searchable and less overwhelming)
 eframe = { version = "0.31.1", features = ["wgpu"], optional = true }
 egui = { version = "0.31.1", optional = true }
 egui-dropdown = { version = "0.13.0", optional = true }
@@ -22,7 +23,7 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.140", features = ["preserve_order"] }
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
 webbrowser = { version = "1.0.4", optional = true }
-zip = { version = "4.3.0", features = ["deflate-flate2"] }
+zip = { version = "6.0.0", features = ["deflate-flate2"] }
 
 [features]
 default = ["gui"]

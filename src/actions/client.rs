@@ -20,13 +20,17 @@ pub async fn install(
     location: PathBuf,
     create_profile: bool,
 ) -> Result<(), InstallerError> {
-    let location = location.canonicalize()?;
     if !location.exists() {
-        std::fs::create_dir_all(&location)?;
+        return Err(InstallerError(
+            "The directory ".to_string()
+                + &location.display().to_string()
+                + " does not exist. "
+                + "Make sure you selected the correct folder and that you have started the game at least once before.",
+        ));
     }
     info!(
         "Installing Minecraft client at {}",
-        location.to_str().unwrap_or("<not representable>")
+        location.display().to_string()
     );
 
     info!("Fetching launch jsons..");
