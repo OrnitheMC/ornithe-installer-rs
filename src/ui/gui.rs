@@ -45,6 +45,7 @@ async fn create_window() -> Result<(), InstallerError> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([630.0, 490.0])
+            .with_resizable(false)
             .with_icon(data),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
