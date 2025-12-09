@@ -87,7 +87,11 @@ pub async fn run() {
                 .default_value("fabric")
                 .ignore_case(true)
                 .value_parser(["fabric", "quilt"])),
-        )
+        )      
+        .subcommand(Command::new("intermediary-generations")
+        .long_flag("intermediary-generations")
+        .about("List the latest & stable intermediary (Calamus) generations")
+    )  
         .get_matches();
 
     match parse(matches).await {
@@ -110,6 +114,12 @@ pub async fn run() {
 }
 
 async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError> {
+    if let Some(_) = matches.subcommand_matches("intermediary-generations") {
+        let generations = crate::net::meta::fetch_intermediary_generations().await?;
+        writeln!(std::io::stdout(), "Latest Generation: {}", generations.latest)?;
+        writeln!(std::io::stdout(), "Stable Generation: {}", generations.stable)?;
+        return Ok(InstallationResult::NotInstalled);
+    }
     if let Some(matches) = matches.subcommand_matches("loader-versions") {
         let versions = crate::net::meta::fetch_loader_versions().await?;
         let loader_type = get_loader_type(matches)?;
@@ -194,10 +204,12 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         let loader_version = get_loader_version(matches, loader_versions)?;
         let location = matches.get_one::<PathBuf>("dir").unwrap().clone();
         let create_profile = matches.get_flag("generate-profile");
+        let generation = get_calamus_generation(matches)?;
         crate::actions::client::install(
             minecraft_version,
             loader_type,
             loader_version,
+            generation,
             location,
             create_profile,
         )
@@ -216,6 +228,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         let loader_versions = loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let location = matches.get_one::<PathBuf>("dir").unwrap().clone();
+        let generation = get_calamus_generation(matches)?;
         if let Some(matches) = matches.subcommand_matches("run") {
             let java = matches.get_one::<PathBuf>("java");
             let run_args = matches.get_one::<String>("args");
@@ -223,6 +236,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
                 minecraft_version,
                 loader_type,
                 loader_version,
+                generation,
                 location,
                 java,
                 run_args.map(|s| s.split(" ")),
@@ -234,6 +248,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
             minecraft_version,
             loader_type,
             loader_version,
+            generation,
             location,
             matches.get_flag("download-minecraft"),
         )
@@ -257,10 +272,12 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
             .unwrap()
             .clone();
         let generate_zip = matches.get_one::<bool>("generate-zip").unwrap().clone();
+        let generation = get_calamus_generation(matches)?;
         crate::actions::mmc_pack::install(
             minecraft_version,
             loader_type,
             loader_version,
+            generation,
             output_dir,
             copy_profile_path,
             generate_zip,
@@ -344,6 +361,16 @@ fn get_loader_version(
     ))
 }
 
+fn get_calamus_generation(matches: &ArgMatches) -> Result<Option<u32>, InstallerError> {
+    let arg = matches.get_one::<u32>("gen");
+    if let Some(g) = arg {
+        return Ok(Some(*g));
+    }
+    Err(InstallerError(
+        "Could not parse calamus generation!".to_string(),
+    ))
+}
+
 fn add_arguments(command: Command) -> Command {
     command
         .arg(arg!(-m --"minecraft-version" <VERSION> "Minecraft version to use").required(true))
@@ -354,4 +381,8 @@ fn add_arguments(command: Command) -> Command {
                 .value_parser(["fabric", "quilt"]),
         )
         .arg(arg!(--"loader-version" <VERSION> "Loader version to use").default_value("latest"))
+        .arg(
+            arg!(--gen <GENERATION> "The Intermediary Generation (Calamus)")
+                .value_parser(value_parser!(u32)),
+        )
 }

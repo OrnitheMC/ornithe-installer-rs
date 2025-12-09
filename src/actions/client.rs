@@ -17,6 +17,7 @@ pub async fn install(
     version: MinecraftVersion,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
+    generation: Option<u32>,
     location: PathBuf,
     create_profile: bool,
 ) -> Result<(), InstallerError> {
@@ -34,13 +35,15 @@ pub async fn install(
     );
 
     info!("Fetching launch jsons..");
-    let (vanilla_profile_name, vanilla_launch_json) = manifest::fetch_launch_json(&version).await?;
+    let (vanilla_profile_name, vanilla_launch_json) =
+        manifest::fetch_launch_json(&version, &generation).await?;
 
     let (profile_name, ornithe_launch_json) = meta::fetch_launch_json(
         crate::net::GameSide::Client,
         &version,
         &loader_type,
         &loader_version,
+        &generation,
     )
     .await?;
 
