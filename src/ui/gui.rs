@@ -125,7 +125,7 @@ impl App {
         let mut available_minecraft_versions = Vec::new();
         let mut available_intermediary_versions = Vec::new();
         let mut available_loader_versions = HashMap::new();
-        let manifest_future = net::manifest::fetch_versions();
+        let manifest_future = net::manifest::fetch_versions(&None);
         let intermediary_future = net::meta::fetch_intermediary_versions();
         let loader_future = net::meta::fetch_loader_versions();
 
@@ -438,7 +438,6 @@ impl App {
                             selected_version,
                             loader_type,
                             loader_version,
-                            None,
                             location,
                             copy_profile_path,
                             generate_zip,

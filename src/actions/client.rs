@@ -35,8 +35,7 @@ pub async fn install(
     );
 
     info!("Fetching launch jsons..");
-    let (vanilla_profile_name, vanilla_launch_json) =
-        manifest::fetch_launch_json(&version, &generation).await?;
+    let (vanilla_profile_name, vanilla_launch_json) = manifest::fetch_launch_json(&version).await?;
 
     let (profile_name, ornithe_launch_json) = meta::fetch_launch_json(
         crate::net::GameSide::Client,

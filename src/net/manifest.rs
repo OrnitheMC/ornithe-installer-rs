@@ -7,13 +7,16 @@ use crate::errors::InstallerError;
 use super::GameSide;
 
 const LAUNCHER_META_URL: &str = "https://ornithemc.net/mc-versions/version_manifest.json";
-const VERSION_META_URL: &str = "https://ornithemc.net/mc-versions/version/manifest/{}.json";
-const VERSION_META_URL_VERSIONED: &str =
-    "https://ornithemc.net/mc-versions/{}/version/manifest/{}.json";
+const LAUNCHER_META_URL_VERSIONED: &str =
+    "https://ornithemc.net/mc-versions/{}/version_manifest.json";
 
-pub async fn fetch_versions() -> Result<VersionManifest, InstallerError> {
+pub async fn fetch_versions(generation: &Option<u32>) -> Result<VersionManifest, InstallerError> {
+    let url = match generation {
+        Some(g) => LAUNCHER_META_URL_VERSIONED.replacen("{}", &format!("gen{}", g), 1),
+        None => LAUNCHER_META_URL.to_string(),
+    };
     super::CLIENT
-        .get(LAUNCHER_META_URL)
+        .get(&url)
         .send()
         .await?
         .json::<VersionManifest>()
@@ -23,16 +26,8 @@ pub async fn fetch_versions() -> Result<VersionManifest, InstallerError> {
 
 pub async fn fetch_launch_json(
     version: &MinecraftVersion,
-    generation: &Option<u32>,
 ) -> Result<(String, String), InstallerError> {
-    let url = match generation {
-        Some(g) => VERSION_META_URL_VERSIONED.replacen("{}", &format!("gen{}", g), 1),
-        None => VERSION_META_URL.to_string(),
-    };
-    let res = super::CLIENT
-        .get(url.replacen("{}", version.id.as_str(), 1))
-        .send()
-        .await?;
+    let res = super::CLIENT.get(&version.details).send().await?;
     if let Some(val) = res.json::<Value>().await?.as_object_mut() {
         let version_id = format!("{}-vanilla", version.id.clone());
         val.insert("id".to_string(), Value::String(version_id.clone()));
@@ -126,7 +121,7 @@ impl MinecraftVersion {
 #[allow(dead_code)]
 #[derive(Deserialize)]
 pub struct VersionDetails {
-    libraries: Value,
+    libraries: Option<Value>,
     #[serde(rename(deserialize = "sharedMappings"))]
     shared_mappings: bool,
     #[serde(rename(deserialize = "normalizedVersion"))]
@@ -151,14 +146,16 @@ pub struct VersionDownload {
 pub async fn find_lwjgl_version(version: &MinecraftVersion) -> Result<String, InstallerError> {
     let details = fetch_version_details(&version).await?;
 
-    if let Some(libs) = details.libraries.as_array() {
-        for library in libs {
-            let name = library.clone();
-            if name.is_string() {
-                let mut name = name.as_str().unwrap().split(":").skip(1);
-                let artifact = name.next().unwrap();
-                if artifact == "lwjgl" {
-                    return Ok(name.next().unwrap().to_owned());
+    if let Some(libraries) = details.libraries {
+        if let Some(libs) = libraries.as_array() {
+            for library in libs {
+                let name = library.clone();
+                if name.is_string() {
+                    let mut name = name.as_str().unwrap().split(":").skip(1);
+                    let artifact = name.next().unwrap();
+                    if artifact == "lwjgl" {
+                        return Ok(name.next().unwrap().to_owned());
+                    }
                 }
             }
         }

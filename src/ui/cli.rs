@@ -151,7 +151,8 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         return Ok(InstallationResult::NotInstalled);
     }
 
-    let minecraft_versions = crate::net::manifest::fetch_versions().await?;
+    let generation = get_calamus_generation(&matches)?;
+    let minecraft_versions = crate::net::manifest::fetch_versions(&generation).await?;
     let intermediary_versions = crate::net::meta::fetch_intermediary_versions().await?;
 
     let mut available_minecraft_versions = Vec::new();
@@ -272,12 +273,10 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
             .unwrap()
             .clone();
         let generate_zip = matches.get_one::<bool>("generate-zip").unwrap().clone();
-        let generation = get_calamus_generation(matches)?;
         crate::actions::mmc_pack::install(
             minecraft_version,
             loader_type,
             loader_version,
-            generation,
             output_dir,
             copy_profile_path,
             generate_zip,

@@ -21,7 +21,6 @@ pub async fn install(
     version: MinecraftVersion,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
-    generation: Option<u32>,
     output_dir: PathBuf,
     copy_profile_path: bool,
     generate_zip: bool,
@@ -68,7 +67,7 @@ pub async fn install(
         transform_intermediary_patch(&version, &intermediary_version.version, &intermediary_maven)
             .await?;
 
-    let minecraft_patch_json = get_mmc_launch_json(&version, &lwjgl_version, &generation).await?;
+    let minecraft_patch_json = get_mmc_launch_json(&version, &lwjgl_version).await?;
 
     let output_file = if generate_zip {
         output_dir.join("Ornithe-".to_owned() + &version.id + ".zip")
@@ -209,10 +208,9 @@ async fn transform_pack_json(
 async fn get_mmc_launch_json(
     version: &MinecraftVersion,
     lwjgl_version: &String,
-    generation: &Option<u32>,
 ) -> Result<String, InstallerError> {
     let client_name = format!("com.mojang:minecraft:{}:client", version.id);
-    let (_, vanilla_launch_json) = manifest::fetch_launch_json(version, generation).await?;
+    let (_, vanilla_launch_json) = manifest::fetch_launch_json(version).await?;
     let vanilla_json = serde_json::from_str::<Value>(&vanilla_launch_json)?;
 
     let client = vanilla_json["downloads"]["client"].as_object().unwrap();
