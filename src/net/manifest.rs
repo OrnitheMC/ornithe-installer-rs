@@ -27,7 +27,7 @@ pub async fn fetch_versions(generation: &Option<u32>) -> Result<VersionManifest,
 pub async fn fetch_launch_json(
     version: &MinecraftVersion,
 ) -> Result<(String, String), InstallerError> {
-    let res = super::CLIENT.get(&version.details).send().await?;
+    let res = super::CLIENT.get(&version.url).send().await?;
     if let Some(val) = res.json::<Value>().await?.as_object_mut() {
         let version_id = format!("{}-vanilla", version.id.clone());
         val.insert("id".to_string(), Value::String(version_id.clone()));
@@ -144,18 +144,21 @@ pub struct VersionDownload {
 }
 
 pub async fn find_lwjgl_version(version: &MinecraftVersion) -> Result<String, InstallerError> {
-    let details = fetch_version_details(&version).await?;
+    let details = super::CLIENT
+        .get(&version.url)
+        .send()
+        .await?
+        .json::<Value>()
+        .await?;
 
-    if let Some(libraries) = details.libraries {
-        if let Some(libs) = libraries.as_array() {
-            for library in libs {
-                let name = library.clone();
-                if name.is_string() {
-                    let mut name = name.as_str().unwrap().split(":").skip(1);
-                    let artifact = name.next().unwrap();
-                    if artifact == "lwjgl" {
-                        return Ok(name.next().unwrap().to_owned());
-                    }
+    if let Some(libraries) = details["libraries"].as_array() {
+        for library in libraries {
+            let name = &library["name"];
+            if name.is_string() {
+                let mut name = name.as_str().unwrap().split(":").skip(1);
+                let artifact = name.next().unwrap();
+                if artifact == "lwjgl" {
+                    return Ok(name.next().unwrap().to_owned());
                 }
             }
         }
