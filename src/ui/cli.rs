@@ -74,25 +74,26 @@ pub async fn run() {
             .alias("minecraft-versions")
             .long_flag("list-game-versions")
             .long_flag_alias("list-minecraft-versions")
-                .about("List supported game versions")
+            .long_about("List supported game versions.")
+                .about("List supported game versions. Arguments: [--show-snapshots, --show-historical]")
                 .arg(arg!(-s --"show-snapshots" "Include snapshot versions"))
                 .arg(arg!(--"show-historical" "Include historical versions")),
         )
         .subcommand(
             Command::new("loader-versions")
             .long_flag("list-loader-versions")
-                .about("List available loader versions")
+            .long_about("List available loader versions.")
+                .about("List available loader versions. Arguments: [--show-betas, --loader-type]")
                 .arg(arg!(-b --"show-betas" "Include beta versions"))
                 .arg(arg!(--"loader-type" <TYPE> "Loader type to use")
                 .default_value("fabric")
                 .ignore_case(true)
                 .value_parser(["fabric", "quilt"])),
-        )      
+        )
         .subcommand(Command::new("intermediary-generations")
         .long_flag("intermediary-generations")
         .about("List the latest & stable intermediary (Calamus) generations")
-    )  
-        .get_matches();
+    ).get_matches();
 
     match parse(matches).await {
         Ok(r) => {
@@ -116,8 +117,16 @@ pub async fn run() {
 async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError> {
     if let Some(_) = matches.subcommand_matches("intermediary-generations") {
         let generations = crate::net::meta::fetch_intermediary_generations().await?;
-        writeln!(std::io::stdout(), "Latest Generation: {}", generations.latest)?;
-        writeln!(std::io::stdout(), "Stable Generation: {}", generations.stable)?;
+        writeln!(
+            std::io::stdout(),
+            "Latest Generation: {}",
+            generations.latest
+        )?;
+        writeln!(
+            std::io::stdout(),
+            "Stable Generation: {}",
+            generations.stable
+        )?;
         return Ok(InstallationResult::NotInstalled);
     }
     if let Some(matches) = matches.subcommand_matches("loader-versions") {
