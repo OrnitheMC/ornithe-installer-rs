@@ -70,7 +70,7 @@ pub async fn run() {
                 )),
         ))
         .subcommand(
-            Command::new("game-versions")
+            add_gen_argument(Command::new("game-versions"))
             .alias("minecraft-versions")
             .long_flag("list-game-versions")
             .long_flag_alias("list-minecraft-versions")
@@ -160,26 +160,12 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         return Ok(InstallationResult::NotInstalled);
     }
 
-    let generation = get_calamus_generation(&matches)?;
-    let minecraft_versions = crate::net::manifest::fetch_versions(&generation).await?;
-    let intermediary_versions = crate::net::meta::fetch_intermediary_versions().await?;
-
-    let mut available_minecraft_versions = Vec::new();
-
-    for version in minecraft_versions.versions {
-        if intermediary_versions.contains_key(&version.id)
-            || intermediary_versions.contains_key(&(version.id.clone() + "-client"))
-            || intermediary_versions.contains_key(&(version.id.clone() + "-server"))
-        {
-            available_minecraft_versions.push(version);
-        }
-    }
-
     if let Some(matches) = matches.subcommand_matches("game-versions") {
         let mut out = String::new();
         let snapshots = matches.get_flag("show-snapshots");
         let historical = matches.get_flag("show-historical");
-        for version in available_minecraft_versions {
+        let info = get_minecraft_information(matches).await?;
+        for version in info.available_minecraft_versions {
             let mut displayed = if snapshots && historical {
                 true
             } else {
@@ -203,23 +189,17 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
     let loader_versions = crate::net::meta::fetch_loader_versions().await?;
 
     if let Some(matches) = matches.subcommand_matches("client") {
-        let minecraft_version = get_minecraft_version(
-            matches,
-            available_minecraft_versions,
-            intermediary_versions,
-            GameSide::Client,
-        )?;
+        let (minecraft_version, info) = get_minecraft_version(matches, GameSide::Client).await?;
         let loader_type = get_loader_type(matches)?;
         let loader_versions = loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let location = matches.get_one::<PathBuf>("dir").unwrap().clone();
         let create_profile = matches.get_flag("generate-profile");
-        let generation = get_calamus_generation(matches)?;
         crate::actions::client::install(
             minecraft_version,
             loader_type,
             loader_version,
-            generation,
+            info.calamus_generation,
             location,
             create_profile,
         )
@@ -228,17 +208,11 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
     }
 
     if let Some(matches) = matches.subcommand_matches("server") {
-        let minecraft_version = get_minecraft_version(
-            matches,
-            available_minecraft_versions,
-            intermediary_versions,
-            GameSide::Server,
-        )?;
+        let (minecraft_version, info) = get_minecraft_version(matches, GameSide::Server).await?;
         let loader_type = get_loader_type(matches)?;
         let loader_versions = loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let location = matches.get_one::<PathBuf>("dir").unwrap().clone();
-        let generation = get_calamus_generation(matches)?;
         if let Some(matches) = matches.subcommand_matches("run") {
             let java = matches.get_one::<PathBuf>("java");
             let run_args = matches.get_one::<String>("args");
@@ -246,7 +220,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
                 minecraft_version,
                 loader_type,
                 loader_version,
-                generation,
+                info.calamus_generation,
                 location,
                 java,
                 run_args.map(|s| s.split(" ")),
@@ -258,7 +232,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
             minecraft_version,
             loader_type,
             loader_version,
-            generation,
+            info.calamus_generation,
             location,
             matches.get_flag("download-minecraft"),
         )
@@ -267,12 +241,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
     }
 
     if let Some(matches) = matches.subcommand_matches("mmc") {
-        let minecraft_version = get_minecraft_version(
-            matches,
-            available_minecraft_versions,
-            intermediary_versions,
-            GameSide::Client,
-        )?;
+        let (minecraft_version, info) = get_minecraft_version(matches, GameSide::Server).await?;
         let loader_type = get_loader_type(matches)?;
         let loader_versions = loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
@@ -284,6 +253,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         let generate_zip = matches.get_one::<bool>("generate-zip").unwrap().clone();
         crate::actions::mmc_pack::install(
             minecraft_version,
+            info.intermediary_versions,
             loader_type,
             loader_version,
             output_dir,
@@ -297,20 +267,50 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
     Ok(InstallationResult::NotInstalled)
 }
 
-fn get_minecraft_version(
+async fn get_minecraft_information(
     matches: &ArgMatches,
-    versions: Vec<MinecraftVersion>,
+) -> Result<MinecraftInformation, InstallerError> {
+    let generation = matches.get_one::<u32>("gen").map(|u| *u);
+    let minecraft_versions = crate::net::manifest::fetch_versions(&generation).await?;
+    let intermediary_versions = crate::net::meta::fetch_intermediary_versions(&generation).await?;
+
+    let mut available_minecraft_versions = Vec::new();
+
+    for version in minecraft_versions.versions {
+        if intermediary_versions.contains_key(&version.id)
+            || intermediary_versions.contains_key(&(version.id.clone() + "-client"))
+            || intermediary_versions.contains_key(&(version.id.clone() + "-server"))
+        {
+            available_minecraft_versions.push(version);
+        }
+    }
+    Ok(MinecraftInformation {
+        intermediary_versions,
+        available_minecraft_versions,
+        calamus_generation: generation,
+    })
+}
+
+struct MinecraftInformation {
     intermediary_versions: HashMap<String, IntermediaryVersion>,
+    available_minecraft_versions: Vec<MinecraftVersion>,
+    calamus_generation: Option<u32>,
+}
+
+async fn get_minecraft_version(
+    matches: &ArgMatches,
     side: GameSide,
-) -> Result<MinecraftVersion, InstallerError> {
+) -> Result<(MinecraftVersion, MinecraftInformation), InstallerError> {
+    let info = get_minecraft_information(matches).await?;
     let minecraft_version_arg = matches.get_one::<String>("minecraft-version").unwrap();
 
-    for version in versions {
+    let intermediary_versions = &info.intermediary_versions;
+    for version in &info.available_minecraft_versions {
         if version.id == *minecraft_version_arg {
             if intermediary_versions.contains_key(&version.id)
                 || intermediary_versions.contains_key(&(version.id.to_owned() + "-" + side.id()))
             {
-                return Ok(version);
+                return Ok((version.clone(), info));
             } else if !intermediary_versions.contains_key(&version.id)
                 && intermediary_versions
                     .contains_key(&(version.id.to_owned() + "-" + side.other_side().id()))
@@ -369,18 +369,8 @@ fn get_loader_version(
     ))
 }
 
-fn get_calamus_generation(matches: &ArgMatches) -> Result<Option<u32>, InstallerError> {
-    let arg = matches.get_one::<u32>("gen");
-    if let Some(g) = arg {
-        return Ok(Some(*g));
-    }
-    Err(InstallerError(
-        "Could not parse calamus generation!".to_string(),
-    ))
-}
-
 fn add_arguments(command: Command) -> Command {
-    command
+    add_gen_argument(command)
         .arg(arg!(-m --"minecraft-version" <VERSION> "Minecraft version to use").required(true))
         .arg(
             arg!(--"loader-type" <TYPE> "Loader type to use")
@@ -389,8 +379,12 @@ fn add_arguments(command: Command) -> Command {
                 .value_parser(["fabric", "quilt"]),
         )
         .arg(arg!(--"loader-version" <VERSION> "Loader version to use").default_value("latest"))
-        .arg(
-            arg!(--gen <GENERATION> "The Intermediary Generation (Calamus)")
-                .value_parser(value_parser!(u32)),
-        )
+}
+
+fn add_gen_argument(command: Command) -> Command {
+    command.arg(
+        arg!(--gen <GENERATION> "The Intermediary Generation (Calamus)")
+            .value_parser(value_parser!(u32))
+            .alias("generation"),
+    )
 }

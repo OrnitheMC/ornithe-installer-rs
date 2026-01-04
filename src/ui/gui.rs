@@ -14,7 +14,7 @@ use crate::{
     net::{
         self,
         manifest::MinecraftVersion,
-        meta::{LoaderType, LoaderVersion},
+        meta::{IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
 
@@ -91,6 +91,7 @@ struct App {
     mode: Mode,
     selected_minecraft_version: String,
     available_minecraft_versions: Vec<MinecraftVersion>,
+    intermediary_versions: HashMap<String, IntermediaryVersion>,
     available_intermediary_versions: Vec<String>,
     filtered_minecraft_versions: Vec<String>,
     show_snapshots: bool,
@@ -125,8 +126,9 @@ impl App {
         let mut available_minecraft_versions = Vec::new();
         let mut available_intermediary_versions = Vec::new();
         let mut available_loader_versions = HashMap::new();
+        let mut intermediary_versions = HashMap::new();
         let manifest_future = net::manifest::fetch_versions(&None);
-        let intermediary_future = net::meta::fetch_intermediary_versions();
+        let intermediary_future = net::meta::fetch_intermediary_versions(&None);
         let loader_future = net::meta::fetch_loader_versions();
 
         info!("Loading versions...");
@@ -135,9 +137,11 @@ impl App {
                 available_minecraft_versions.push(ele);
             }
         }
+
         if let Ok(versions) = intermediary_future.await {
-            for v in versions.keys() {
-                available_intermediary_versions.push(v.clone());
+            for v in versions {
+                available_intermediary_versions.push(v.0.clone());
+                intermediary_versions.insert(v.0, v.1);
             }
         }
         if available_minecraft_versions.len() == 0 {
@@ -166,6 +170,7 @@ impl App {
             mode: Mode::Client,
             selected_minecraft_version: String::new(),
             available_minecraft_versions,
+            intermediary_versions,
             available_intermediary_versions,
             filtered_minecraft_versions: Vec::new(),
             show_snapshots: false,
@@ -433,9 +438,11 @@ impl App {
                     let location = Path::new(&self.mmc_output_location).to_path_buf();
                     let copy_profile_path = self.copy_generated_location;
                     let generate_zip = self.generate_zip;
+                    let intermediary_versions = self.intermediary_versions.clone();
                     let handle = tokio::spawn(async move {
                         crate::actions::mmc_pack::install(
                             selected_version,
+                            intermediary_versions,
                             loader_type,
                             loader_version,
                             location,

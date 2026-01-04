@@ -188,17 +188,22 @@ async fn fetch_loader_versions_type(
 }
 
 #[allow(dead_code)]
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct IntermediaryVersion {
     pub version: String,
     stable: bool,
     pub maven: String,
 }
 
-pub async fn fetch_intermediary_versions()
--> Result<HashMap<String, IntermediaryVersion>, InstallerError> {
+pub async fn fetch_intermediary_versions(
+    generation: &Option<u32>,
+) -> Result<HashMap<String, IntermediaryVersion>, InstallerError> {
+    let url = match generation {
+        Some(g) => format!("/v3/versions/gen{}/intermediary", g),
+        None => "/v3/versions/intermediary".to_owned(),
+    };
     let versions = super::CLIENT
-        .get(META_URL.to_owned() + "/v3/versions/intermediary")
+        .get(META_URL.to_owned() + &url)
         .send()
         .await?
         .json::<Vec<IntermediaryVersion>>()

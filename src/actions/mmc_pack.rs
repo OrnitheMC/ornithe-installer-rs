@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write, path::PathBuf};
+use std::{collections::HashMap, fs::File, io::Write, path::PathBuf};
 
 use log::info;
 use serde_json::{Value, json};
@@ -8,7 +8,7 @@ use crate::{
     errors::InstallerError,
     net::{
         manifest::{self, MinecraftVersion},
-        meta::{self, LoaderType, LoaderVersion},
+        meta::{self, IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
 
@@ -19,6 +19,7 @@ const MMC_PACK: &str = include_str!("../../res/packformat/mmc-pack.json");
 
 pub async fn install(
     version: MinecraftVersion,
+    intermediary_versions: HashMap<String, IntermediaryVersion>,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
     output_dir: PathBuf,
@@ -32,7 +33,6 @@ pub async fn install(
 
     info!("Fetching version information...");
     let version_id = version.get_id(&crate::net::GameSide::Client).await?;
-    let intermediary_versions = meta::fetch_intermediary_versions().await?;
     let intermediary_version = intermediary_versions
         .get(&version_id)
         .ok_or(InstallerError(
@@ -261,7 +261,8 @@ async fn get_mmc_launch_json(
     let lwjgl_major = lwjgl_version.chars().next().unwrap();
     let mut json = json!({
         "assetIndex": vanilla_json["assetIndex"],
-        "compatibleJavaMajors": [8, 17, 21],
+        "compatibleJavaMajors": [8, 17, 21, 25],
+        "compatibleJavaName": "java-runtime-epsilon",
         "formatVersion":1,
         "libraries": vanilla_libraries,
         "mainClass": vanilla_json["mainClass"],
