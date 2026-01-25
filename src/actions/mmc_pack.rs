@@ -1,5 +1,6 @@
-use std::{fs::File, io::Write, path::PathBuf};
+use std::{collections::HashMap, fs::File, io::Write, path::PathBuf};
 
+use arboard::Clipboard;
 use log::info;
 use serde_json::{Value, json};
 use zip::{ZipWriter, write::SimpleFileOptions};
@@ -8,7 +9,7 @@ use crate::{
     errors::InstallerError,
     net::{
         manifest::{self, MinecraftVersion},
-        meta::{self, LoaderType, LoaderVersion},
+        meta::{self, IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
 
@@ -19,11 +20,13 @@ const MMC_PACK: &str = include_str!("../../res/packformat/mmc-pack.json");
 
 pub async fn install(
     version: MinecraftVersion,
+    intermediary_versions: HashMap<String, IntermediaryVersion>,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
     output_dir: PathBuf,
     copy_profile_path: bool,
     generate_zip: bool,
+    generation: Option<u32>,
 ) -> Result<(), InstallerError> {
     if !output_dir.exists() {
         std::fs::create_dir_all(&output_dir)?;
@@ -32,7 +35,6 @@ pub async fn install(
 
     info!("Fetching version information...");
     let version_id = version.get_id(&crate::net::GameSide::Client).await?;
-    let intermediary_versions = meta::fetch_intermediary_versions().await?;
     let intermediary_version = intermediary_versions
         .get(&version_id)
         .ok_or(InstallerError(
@@ -49,6 +51,11 @@ pub async fn install(
         .to_owned();
 
     let lwjgl_version = manifest::find_lwjgl_version(&version).await?;
+
+    let calamus_gen = match generation {
+        Some(g) => g,
+        None => meta::fetch_intermediary_generations().await?.stable,
+    };
 
     info!("Transforming templates...");
 
@@ -69,10 +76,15 @@ pub async fn install(
 
     let minecraft_patch_json = get_mmc_launch_json(&version, &lwjgl_version).await?;
 
+    let profile_name = format!(
+        "Ornithe Gen{calamus_gen} {} {}",
+        loader_type.get_localized_name(),
+        version.id
+    );
     let output_file = if generate_zip {
-        output_dir.join("Ornithe-".to_owned() + &version.id + ".zip")
+        output_dir.join(profile_name.clone() + ".zip")
     } else {
-        let dir = output_dir.join("Ornithe-".to_owned() + &version.id);
+        let dir = output_dir.join(profile_name.clone());
         if std::fs::exists(&dir).unwrap_or_default() {
             return Err(InstallerError("Instance already exists".to_string()));
         }
@@ -99,7 +111,7 @@ pub async fn install(
         Box::new(output_file.clone())
     };
 
-    let mut instance_cfg = INSTANCE_CONFIG.replace("${mc_version}", &version.id);
+    let mut instance_cfg = INSTANCE_CONFIG.replace("${profile_name}", &profile_name);
 
     if cfg!(all(any(unix), not(target_os = "macos"))) {
         instance_cfg += "\nOverrideCommands=true\nWrapperCommand=env __GL_THREADED_OPTIMIZATIONS=0";
@@ -156,7 +168,9 @@ pub async fn install(
         not(any(target_os = "android", target_os = "emscripten"))
     ))]
     if copy_profile_path {
-        cli_clipboard::set_contents(output_file.to_string_lossy().into_owned())
+        let mut cp = Clipboard::new().map_err(|e| InstallerError(e.to_string()))?;
+        cp.set()
+            .text(output_file.to_string_lossy().into_owned())
             .map_err(|_| InstallerError("Failed to copy profile path".to_owned()))?;
     }
 
@@ -261,7 +275,8 @@ async fn get_mmc_launch_json(
     let lwjgl_major = lwjgl_version.chars().next().unwrap();
     let mut json = json!({
         "assetIndex": vanilla_json["assetIndex"],
-        "compatibleJavaMajors": [8, 17, 21],
+        "compatibleJavaMajors": [8, 17, 21, 25],
+        "compatibleJavaName": "java-runtime-epsilon",
         "formatVersion":1,
         "libraries": vanilla_libraries,
         "mainClass": vanilla_json["mainClass"],

@@ -21,6 +21,7 @@ pub async fn install(
     version: MinecraftVersion,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
+    generation: Option<u32>,
     location: PathBuf,
     install_server: bool,
 ) -> Result<(), InstallerError> {
@@ -28,6 +29,7 @@ pub async fn install(
         &version,
         &loader_type,
         &loader_version,
+        &generation,
         &location,
         install_server,
     )
@@ -48,6 +50,7 @@ async fn install_path(
     version: &MinecraftVersion,
     loader_type: &LoaderType,
     loader_version: &LoaderVersion,
+    generation: &Option<u32>,
     location: &PathBuf,
     install_server: bool,
 ) -> Result<(), InstallerError> {
@@ -76,6 +79,7 @@ async fn install_path(
         version,
         loader_type,
         loader_version,
+        generation,
     )
     .await?;
 
@@ -300,6 +304,7 @@ pub async fn install_and_run<I, S>(
     version: MinecraftVersion,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
+    generation: Option<u32>,
     location: PathBuf,
     java: Option<&PathBuf>,
     args: Option<I>,
@@ -321,7 +326,15 @@ where
     }
 
     if needs_install {
-        install_path(&version, &loader_type, &loader_version, &location, true).await?;
+        install_path(
+            &version,
+            &loader_type,
+            &loader_version,
+            &generation,
+            &location,
+            true,
+        )
+        .await?;
     }
 
     let mut java_binary = "java".to_owned();

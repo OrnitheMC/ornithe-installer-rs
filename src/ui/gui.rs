@@ -5,7 +5,6 @@ use std::{
 };
 
 use egui::{Button, ComboBox, RichText, Sense, Theme, Vec2};
-use egui_dropdown::DropDownBox;
 use log::{error, info};
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
 use tokio::task::JoinHandle;
@@ -15,7 +14,7 @@ use crate::{
     net::{
         self,
         manifest::MinecraftVersion,
-        meta::{LoaderType, LoaderVersion},
+        meta::{IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
 
@@ -92,6 +91,7 @@ struct App {
     mode: Mode,
     selected_minecraft_version: String,
     available_minecraft_versions: Vec<MinecraftVersion>,
+    intermediary_versions: HashMap<String, IntermediaryVersion>,
     available_intermediary_versions: Vec<String>,
     filtered_minecraft_versions: Vec<String>,
     show_snapshots: bool,
@@ -113,6 +113,7 @@ struct App {
         Receiver<Option<FilePickResult>>,
     ),
     file_picker_open: bool,
+    minecraft_version_dropdown_open: bool,
 }
 
 struct FilePickResult {
@@ -125,8 +126,9 @@ impl App {
         let mut available_minecraft_versions = Vec::new();
         let mut available_intermediary_versions = Vec::new();
         let mut available_loader_versions = HashMap::new();
-        let manifest_future = net::manifest::fetch_versions();
-        let intermediary_future = net::meta::fetch_intermediary_versions();
+        let mut intermediary_versions = HashMap::new();
+        let manifest_future = net::manifest::fetch_versions(&None);
+        let intermediary_future = net::meta::fetch_intermediary_versions(&None);
         let loader_future = net::meta::fetch_loader_versions();
 
         info!("Loading versions...");
@@ -135,9 +137,11 @@ impl App {
                 available_minecraft_versions.push(ele);
             }
         }
+
         if let Ok(versions) = intermediary_future.await {
-            for v in versions.keys() {
-                available_intermediary_versions.push(v.clone());
+            for v in versions {
+                available_intermediary_versions.push(v.0.clone());
+                intermediary_versions.insert(v.0, v.1);
             }
         }
         if available_minecraft_versions.len() == 0 {
@@ -166,6 +170,7 @@ impl App {
             mode: Mode::Client,
             selected_minecraft_version: String::new(),
             available_minecraft_versions,
+            intermediary_versions,
             available_intermediary_versions,
             filtered_minecraft_versions: Vec::new(),
             show_snapshots: false,
@@ -187,6 +192,7 @@ impl App {
             file_picker_channel: std::sync::mpsc::channel(),
             file_picker_open: false,
             installation_task: None,
+            minecraft_version_dropdown_open: false,
         };
         app.filter_minecraft_versions();
         Ok(app)
@@ -255,6 +261,7 @@ impl App {
                     "minecraft_version",
                     &mut self.selected_minecraft_version,
                     |ui, text| ui.selectable_label(false, text),
+                    &mut self.minecraft_version_dropdown_open,
                 )
                 .max_height(130.0)
                 .desired_width(170.0)
@@ -402,6 +409,7 @@ impl App {
                             selected_version,
                             loader_type,
                             loader_version,
+                            None,
                             location,
                             create_profile,
                         )
@@ -418,6 +426,7 @@ impl App {
                             selected_version,
                             loader_type,
                             loader_version,
+                            None,
                             location,
                             download_server,
                         )
@@ -429,14 +438,17 @@ impl App {
                     let location = Path::new(&self.mmc_output_location).to_path_buf();
                     let copy_profile_path = self.copy_generated_location;
                     let generate_zip = self.generate_zip;
+                    let intermediary_versions = self.intermediary_versions.clone();
                     let handle = tokio::spawn(async move {
                         crate::actions::mmc_pack::install(
                             selected_version,
+                            intermediary_versions,
                             loader_type,
                             loader_version,
                             location,
                             copy_profile_path,
                             generate_zip,
+                            None,
                         )
                         .await
                     });
@@ -565,5 +577,162 @@ impl eframe::App for App {
         });
 
         self.monitor_installation();
+    }
+}
+
+use egui::{
+    Id, Response, ScrollArea, TextEdit, Ui, Widget, WidgetText,
+    text::{CCursor, CCursorRange},
+};
+use std::hash::Hash;
+
+/// Dropdown widget (https://github.com/ItsEthra/egui-dropdown/pull/21, with slight changes)
+pub struct DropDownBox<
+    'a,
+    F: FnMut(&mut Ui, &str) -> Response,
+    V: AsRef<str>,
+    I: Iterator<Item = V>,
+> {
+    buf: &'a mut String,
+    popup_id: Id,
+    display: F,
+    it: I,
+    hint_text: WidgetText,
+    filter_by_input: bool,
+    select_on_focus: bool,
+    desired_width: Option<f32>,
+    max_height: Option<f32>,
+    open: &'a mut bool,
+}
+
+impl<'a, F: FnMut(&mut Ui, &str) -> Response, V: AsRef<str>, I: Iterator<Item = V>>
+    DropDownBox<'a, F, V, I>
+{
+    /// Creates new dropdown box.
+    pub fn from_iter(
+        it: impl IntoIterator<IntoIter = I>,
+        id_source: impl Hash,
+        buf: &'a mut String,
+        display: F,
+        open_state: &'a mut bool,
+    ) -> Self {
+        Self {
+            popup_id: Id::new(id_source),
+            it: it.into_iter(),
+            display,
+            buf,
+            hint_text: WidgetText::default(),
+            filter_by_input: true,
+            select_on_focus: true,
+            desired_width: None,
+            max_height: None,
+            open: open_state,
+        }
+    }
+
+    /// Add a hint text to the Text Edit
+    pub fn hint_text(mut self, hint_text: impl Into<WidgetText>) -> Self {
+        self.hint_text = hint_text.into();
+        self
+    }
+
+    /// Passes through the desired width value to the underlying Text Edit
+    pub fn desired_width(mut self, desired_width: f32) -> Self {
+        self.desired_width = desired_width.into();
+        self
+    }
+
+    /// Set a maximum height limit for the opened popup
+    pub fn max_height(mut self, height: f32) -> Self {
+        self.max_height = height.into();
+        self
+    }
+}
+
+impl<F: FnMut(&mut Ui, &str) -> Response, V: AsRef<str>, I: Iterator<Item = V>> Widget
+    for DropDownBox<'_, F, V, I>
+{
+    fn ui(self, ui: &mut Ui) -> Response {
+        let Self {
+            popup_id,
+            buf,
+            it,
+            mut display,
+            hint_text,
+            filter_by_input,
+            select_on_focus,
+            desired_width,
+            max_height,
+            open,
+        } = self;
+
+        let mut edit = TextEdit::singleline(buf).hint_text(hint_text);
+        if let Some(dw) = desired_width {
+            edit = edit.desired_width(dw);
+        }
+        let mut edit_output = edit.show(ui);
+        let mut r = edit_output.response;
+        if r.gained_focus() {
+            if select_on_focus {
+                edit_output
+                    .state
+                    .cursor
+                    .set_char_range(Some(CCursorRange::two(
+                        CCursor::new(0),
+                        CCursor::new(buf.len()),
+                    )));
+                edit_output.state.store(ui.ctx(), r.id);
+            }
+            *open = true;
+        }
+
+        let mut changed = false;
+        if let Some(popup_response) = egui::Popup::new(
+            popup_id,
+            ui.ctx().clone(),
+            r.rect.left_bottom(),
+            ui.layer_id(),
+        )
+        .open(*open)
+        .show(|ui| {
+            if let Some(max) = max_height {
+                ui.set_max_height(max);
+            }
+
+            ScrollArea::vertical()
+                .max_height(f32::INFINITY)
+                .show(ui, |ui| {
+                    for var in it {
+                        let text = var.as_ref();
+                        if filter_by_input
+                            && !buf.is_empty()
+                            && !text.to_lowercase().contains(&buf.to_lowercase())
+                        {
+                            continue;
+                        }
+
+                        if display(ui, text).clicked() {
+                            *buf = text.to_owned();
+                            changed = true;
+
+                            *open = false;
+                        }
+                    }
+                });
+        }) {
+            if r.lost_focus() && !popup_response.response.has_focus() {
+                *open = false;
+            }
+        } else {
+            if r.lost_focus() {
+                *open = false;
+            }
+        }
+
+        if changed {
+            r.mark_changed();
+        }
+
+        r
     }
 }

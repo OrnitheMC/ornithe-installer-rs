@@ -65,6 +65,12 @@ impl GameSide {
             GameSide::Server => "/v3/versions/{}-loader/{}/{}/server/json",
         }
     }
+    fn launch_json_endpoint_versioned(&self) -> &str {
+        match self {
+            GameSide::Client => "/v3/versions/{}/{}-loader/{}/{}/profile/json",
+            GameSide::Server => "/v3/versions/{}/{}-loader/{}/{}/server/json",
+        }
+    }
 }
 
 pub async fn fetch_launch_json(
@@ -72,12 +78,18 @@ pub async fn fetch_launch_json(
     version: &MinecraftVersion,
     loader_type: &LoaderType,
     loader_version: &LoaderVersion,
+    generation: &Option<u32>,
 ) -> Result<(String, Value), InstallerError> {
+    let endpoint = match generation {
+        Some(g) => &side
+            .launch_json_endpoint_versioned()
+            .replacen("{}", &format!("gen{}", g), 1),
+        None => &side.launch_json_endpoint().to_string(),
+    };
     let mut text = super::CLIENT
         .get(
             META_URL.to_owned()
-                + &side
-                    .launch_json_endpoint()
+                + &endpoint
                     .replacen("{}", loader_type.get_name(), 1)
                     .replacen("{}", version.get_id(&side).await?.as_str(), 1)
                     .replacen("{}", &loader_version.version, 1),
@@ -176,17 +188,22 @@ async fn fetch_loader_versions_type(
 }
 
 #[allow(dead_code)]
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct IntermediaryVersion {
     pub version: String,
     stable: bool,
     pub maven: String,
 }
 
-pub async fn fetch_intermediary_versions()
--> Result<HashMap<String, IntermediaryVersion>, InstallerError> {
+pub async fn fetch_intermediary_versions(
+    generation: &Option<u32>,
+) -> Result<HashMap<String, IntermediaryVersion>, InstallerError> {
+    let url = match generation {
+        Some(g) => format!("/v3/versions/gen{}/intermediary", g),
+        None => "/v3/versions/intermediary".to_owned(),
+    };
     let versions = super::CLIENT
-        .get(META_URL.to_owned() + "/v3/versions/intermediary")
+        .get(META_URL.to_owned() + &url)
         .send()
         .await?
         .json::<Vec<IntermediaryVersion>>()
@@ -223,4 +240,22 @@ pub async fn fetch_profile_libraries(
         .await?;
 
     Ok(library_upgrades)
+}
+
+#[derive(Deserialize)]
+pub struct IntermediaryGenerations {
+    #[serde(rename(deserialize = "latestIntermediaryGeneration"))]
+    pub latest: u32,
+    #[serde(rename(deserialize = "stableIntermediaryGeneration"))]
+    pub stable: u32,
+}
+
+pub async fn fetch_intermediary_generations() -> Result<IntermediaryGenerations, InstallerError> {
+    let generations = super::CLIENT
+        .get(META_URL.to_owned() + "/v3/versions/intermediary_generations")
+        .send()
+        .await?
+        .json::<IntermediaryGenerations>()
+        .await?;
+    Ok(generations)
 }

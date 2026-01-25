@@ -17,6 +17,7 @@ pub async fn install(
     version: MinecraftVersion,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
+    generation: Option<u32>,
     location: PathBuf,
     create_profile: bool,
 ) -> Result<(), InstallerError> {
@@ -33,6 +34,11 @@ pub async fn install(
         location.display().to_string()
     );
 
+    let calamus_gen = match generation {
+        Some(g) => g,
+        None => meta::fetch_intermediary_generations().await?.stable,
+    };
+
     info!("Fetching launch jsons..");
     let (vanilla_profile_name, vanilla_launch_json) = manifest::fetch_launch_json(&version).await?;
 
@@ -41,6 +47,7 @@ pub async fn install(
         &version,
         &loader_type,
         &loader_version,
+        &generation,
     )
     .await?;
 
@@ -68,7 +75,7 @@ pub async fn install(
     std::fs::write(profile_json, serde_json::to_string(&ornithe_launch_json)?)?;
 
     if create_profile {
-        update_profiles(location, profile_name, version, loader_type)?;
+        update_profiles(location, profile_name, version, loader_type, calamus_gen)?;
     }
 
     Ok(())
@@ -93,25 +100,37 @@ fn update_profiles(
     name: String,
     version: MinecraftVersion,
     loader_type: LoaderType,
+    calamus_gen: u32,
 ) -> Result<(), InstallerError> {
     let launcher_profiles_path = get_launcher_profiles_json(game_dir)?;
+
+    let fn_json_error = || InstallerError("Invalid launcher_profiles.json file!".to_string());
 
     match std::fs::read_to_string(launcher_profiles_path.clone()) {
         Ok(launcher_profiles) => match serde_json::from_str::<Value>(&launcher_profiles) {
             Ok(mut json) => {
-                let raw_profiles = json.as_object_mut().unwrap().get_mut("profiles").unwrap();
+                let raw_profiles = json
+                    .as_object_mut()
+                    .ok_or_else(fn_json_error)?
+                    .get_mut("profiles")
+                    .ok_or_else(fn_json_error)?;
                 if !raw_profiles.is_object() {
                     return Err(InstallerError(
                         "\"profiles\" field must be an object".to_string(),
                     ));
                 }
-                let profiles = raw_profiles.as_object_mut().unwrap();
+                let profiles = raw_profiles.as_object_mut().ok_or_else(fn_json_error)?;
 
-                let new_profile_name =
-                    "Ornithe (".to_owned() + loader_type.get_localized_name() + ") " + &version.id;
+                let new_profile_name = format!(
+                    "Ornithe Gen{calamus_gen} {} {}",
+                    loader_type.get_localized_name(),
+                    version.id
+                );
 
                 if profiles.contains_key(&new_profile_name) {
-                    let raw_profile = profiles.get_mut(&new_profile_name).unwrap();
+                    let raw_profile = profiles
+                        .get_mut(&new_profile_name)
+                        .ok_or_else(fn_json_error)?;
                     if !raw_profile.is_object() {
                         return Err(InstallerError(format!(
                             "Cannot update profile of name {new_profile_name} because it is not an object!"
@@ -120,7 +139,7 @@ fn update_profiles(
 
                     raw_profile
                         .as_object_mut()
-                        .unwrap()
+                        .ok_or_else(fn_json_error)?
                         .insert("lastVersionId".to_string(), Value::String(name));
                 } else {
                     let profile = json!({

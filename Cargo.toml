@@ -7,28 +7,26 @@ authors = [
 ]
 
 [dependencies]
+arboard = { version = "3.6.1", features = ["wayland-data-control"] }
 base64 = "0.22.1"
 chrono = { version = "0.4.40", features = ["serde"] }
 clap = { version = "4.5.35", features = ["cargo", "derive", "string"] }
-cli-clipboard = "0.4.0"
-# keep eframe and egui at 0.31.1 because of egui-dropdown, used for the minecraft version dropdown (searchable and less overwhelming)
-eframe = { version = "0.31.1", features = ["wgpu"], optional = true }
-egui = { version = "0.31.1", optional = true }
-egui-dropdown = { version = "0.13.0", optional = true }
+eframe = { version = "0.33.2", features = ["wgpu"], optional = true }
+egui = { version = "0.33.2", optional = true }
 env_logger = "0.11.8"
 log = "0.4.27"
-reqwest = { version = "0.12.15", features = ["json"] }
-rfd = { version = "0.15.3", optional = true }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = { version = "1.0.140", features = ["preserve_order"] }
+reqwest = { version = "0.13.1", features = ["json", "native-tls", "http2", "charset", "system-proxy"], default-features = false }
+rfd = { version = "0.17.2", optional = true }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.145", features = ["preserve_order"] }
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
 webbrowser = { version = "1.0.4", optional = true }
-zip = { version = "6.0.0", features = ["deflate-flate2"] }
+zip = { version = "7.2.0", features = ["deflate-flate2"], default-features = false }
 
 [features]
 default = ["gui"]
 
-gui = ["dep:eframe", "dep:egui", "dep:egui-dropdown", "dep:rfd", "dep:webbrowser"]
+gui = ["dep:eframe", "dep:egui", "dep:rfd", "dep:webbrowser"]
 
 [build-dependencies]
 embed-resource = "3.0.5"
