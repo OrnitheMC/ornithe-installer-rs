@@ -259,6 +259,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
             output_dir,
             copy_profile_path,
             generate_zip,
+            info.calamus_generation,
         )
         .await?;
         return Ok(InstallationResult::Installed);

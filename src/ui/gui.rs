@@ -448,6 +448,7 @@ impl App {
                             location,
                             copy_profile_path,
                             generate_zip,
+                            None,
                         )
                         .await
                     });

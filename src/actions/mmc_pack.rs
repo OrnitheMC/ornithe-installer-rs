@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fs::File, io::Write, path::PathBuf};
 
+use arboard::Clipboard;
 use log::info;
 use serde_json::{Value, json};
 use zip::{ZipWriter, write::SimpleFileOptions};
@@ -25,6 +26,7 @@ pub async fn install(
     output_dir: PathBuf,
     copy_profile_path: bool,
     generate_zip: bool,
+    generation: Option<u32>,
 ) -> Result<(), InstallerError> {
     if !output_dir.exists() {
         std::fs::create_dir_all(&output_dir)?;
@@ -50,6 +52,11 @@ pub async fn install(
 
     let lwjgl_version = manifest::find_lwjgl_version(&version).await?;
 
+    let calamus_gen = match generation {
+        Some(g) => g,
+        None => meta::fetch_intermediary_generations().await?.stable,
+    };
+
     info!("Transforming templates...");
 
     let mut transformed_pack_json = serde_json::from_str::<Value>(
@@ -69,10 +76,15 @@ pub async fn install(
 
     let minecraft_patch_json = get_mmc_launch_json(&version, &lwjgl_version).await?;
 
+    let profile_name = format!(
+        "Ornithe Gen{calamus_gen} {} {}",
+        loader_type.get_localized_name(),
+        version.id
+    );
     let output_file = if generate_zip {
-        output_dir.join("Ornithe-".to_owned() + &version.id + ".zip")
+        output_dir.join(profile_name.clone() + ".zip")
     } else {
-        let dir = output_dir.join("Ornithe-".to_owned() + &version.id);
+        let dir = output_dir.join(profile_name.clone());
         if std::fs::exists(&dir).unwrap_or_default() {
             return Err(InstallerError("Instance already exists".to_string()));
         }
@@ -99,7 +111,7 @@ pub async fn install(
         Box::new(output_file.clone())
     };
 
-    let mut instance_cfg = INSTANCE_CONFIG.replace("${mc_version}", &version.id);
+    let mut instance_cfg = INSTANCE_CONFIG.replace("${profile_name}", &profile_name);
 
     if cfg!(all(any(unix), not(target_os = "macos"))) {
         instance_cfg += "\nOverrideCommands=true\nWrapperCommand=env __GL_THREADED_OPTIMIZATIONS=0";
@@ -156,7 +168,9 @@ pub async fn install(
         not(any(target_os = "android", target_os = "emscripten"))
     ))]
     if copy_profile_path {
-        cli_clipboard::set_contents(output_file.to_string_lossy().into_owned())
+        let mut cp = Clipboard::new().map_err(|e| InstallerError(e.to_string()))?;
+        cp.set()
+            .text(output_file.to_string_lossy().into_owned())
             .map_err(|_| InstallerError("Failed to copy profile path".to_owned()))?;
     }
 
