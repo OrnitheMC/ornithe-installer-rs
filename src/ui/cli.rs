@@ -189,7 +189,8 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
     let loader_versions = crate::net::meta::fetch_loader_versions().await?;
 
     if let Some(matches) = matches.subcommand_matches("client") {
-        let (minecraft_version, info) = get_minecraft_version(matches, GameSide::Client).await?;
+        let (minecraft_version, intermediary, info) =
+            get_minecraft_version(matches, GameSide::Client).await?;
         let loader_type = get_loader_type(matches)?;
         let loader_versions = loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
@@ -197,6 +198,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         let create_profile = matches.get_flag("generate-profile");
         crate::actions::client::install(
             minecraft_version,
+            intermediary,
             loader_type,
             loader_version,
             info.calamus_generation,
@@ -208,7 +210,8 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
     }
 
     if let Some(matches) = matches.subcommand_matches("server") {
-        let (minecraft_version, info) = get_minecraft_version(matches, GameSide::Server).await?;
+        let (minecraft_version, intermediary, info) =
+            get_minecraft_version(matches, GameSide::Server).await?;
         let loader_type = get_loader_type(matches)?;
         let loader_versions = loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
@@ -218,6 +221,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
             let run_args = matches.get_one::<String>("args");
             crate::actions::server::install_and_run(
                 minecraft_version,
+                intermediary,
                 loader_type,
                 loader_version,
                 info.calamus_generation,
@@ -230,6 +234,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         }
         crate::actions::server::install(
             minecraft_version,
+            intermediary,
             loader_type,
             loader_version,
             info.calamus_generation,
@@ -241,7 +246,8 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
     }
 
     if let Some(matches) = matches.subcommand_matches("mmc") {
-        let (minecraft_version, info) = get_minecraft_version(matches, GameSide::Server).await?;
+        let (minecraft_version, intermediary, info) =
+            get_minecraft_version(matches, GameSide::Server).await?;
         let loader_type = get_loader_type(matches)?;
         let loader_versions = loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
@@ -253,7 +259,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         let generate_zip = matches.get_one::<bool>("generate-zip").unwrap().clone();
         crate::actions::mmc_pack::install(
             minecraft_version,
-            info.intermediary_versions,
+            intermediary,
             loader_type,
             loader_version,
             output_dir,
@@ -301,17 +307,18 @@ struct MinecraftInformation {
 async fn get_minecraft_version(
     matches: &ArgMatches,
     side: GameSide,
-) -> Result<(MinecraftVersion, MinecraftInformation), InstallerError> {
+) -> Result<(MinecraftVersion, IntermediaryVersion, MinecraftInformation), InstallerError> {
     let info = get_minecraft_information(matches).await?;
     let minecraft_version_arg = matches.get_one::<String>("minecraft-version").unwrap();
 
     let intermediary_versions = &info.intermediary_versions;
     for version in &info.available_minecraft_versions {
         if version.id == *minecraft_version_arg {
-            if intermediary_versions.contains_key(&version.id)
-                || intermediary_versions.contains_key(&(version.id.to_owned() + "-" + side.id()))
-            {
-                return Ok((version.clone(), info));
+            let intermediary = intermediary_versions
+                .get(&version.id)
+                .or_else(|| intermediary_versions.get(&(version.id.to_owned() + "-" + side.id())));
+            if let Some(int) = intermediary {
+                return Ok((version.clone(), int.clone(), info));
             } else if !intermediary_versions.contains_key(&version.id)
                 && intermediary_versions
                     .contains_key(&(version.id.to_owned() + "-" + side.other_side().id()))

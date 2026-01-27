@@ -404,9 +404,11 @@ impl App {
                     let loader_type = self.selected_loader_type.clone();
                     let location = Path::new(&self.client_install_location).to_path_buf();
                     let create_profile = self.create_profile;
+                    let intermediary_version = self.get_intermediary_version(&selected_version);
                     let handle = tokio::spawn(async move {
                         crate::actions::client::install(
                             selected_version,
+                            intermediary_version,
                             loader_type,
                             loader_version,
                             None,
@@ -421,9 +423,11 @@ impl App {
                     let loader_type = self.selected_loader_type.clone();
                     let location = Path::new(&self.server_install_location).to_path_buf();
                     let download_server = self.download_minecraft_server;
+                    let intermediary_version = self.get_intermediary_version(&selected_version);
                     self.installation_task = Some(tokio::spawn(async move {
                         crate::actions::server::install(
                             selected_version,
+                            intermediary_version,
                             loader_type,
                             loader_version,
                             None,
@@ -438,11 +442,11 @@ impl App {
                     let location = Path::new(&self.mmc_output_location).to_path_buf();
                     let copy_profile_path = self.copy_generated_location;
                     let generate_zip = self.generate_zip;
-                    let intermediary_versions = self.intermediary_versions.clone();
+                    let intermediary_version = self.get_intermediary_version(&selected_version);
                     let handle = tokio::spawn(async move {
                         crate::actions::mmc_pack::install(
                             selected_version,
-                            intermediary_versions,
+                            intermediary_version,
                             loader_type,
                             loader_version,
                             location,
@@ -516,6 +520,17 @@ impl App {
                 });
             }
         }
+    }
+
+    fn get_intermediary_version(&self, selected_version: &MinecraftVersion) -> IntermediaryVersion {
+        self.intermediary_versions
+            .get(&selected_version.id)
+            .or_else(|| {
+                self.intermediary_versions
+                    .get(&(selected_version.id.to_owned() + "-client"))
+            })
+            .unwrap()
+            .clone()
     }
 }
 

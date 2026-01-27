@@ -27,8 +27,22 @@ pub async fn fetch_versions(generation: &Option<u32>) -> Result<VersionManifest,
 pub async fn fetch_launch_json(
     version: &MinecraftVersion,
 ) -> Result<(String, String), InstallerError> {
-    let res = super::CLIENT.get(&version.url).send().await?;
-    if let Some(val) = res.json::<Value>().await?.as_object_mut() {
+    let res = super::CLIENT.get(&version.url).send().await?.text().await;
+    let mut json = match res {
+        Ok(j) => match serde_json::from_str::<Value>(&j) {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(InstallerError(format!("{}: {}", e, &j)));
+            }
+        },
+        Err(e) => {
+            return Err(InstallerError(format!(
+                "{}, Couldn't deserialize into string!",
+                e
+            )));
+        }
+    };
+    if let Some(val) = json.as_object_mut() {
         let version_id = format!("{}-vanilla", version.id.clone());
         val.insert("id".to_string(), Value::String(version_id.clone()));
 
@@ -83,14 +97,6 @@ pub struct MinecraftVersion {
 }
 
 impl MinecraftVersion {
-    pub async fn get_id(&self, side: &GameSide) -> Result<String, reqwest::Error> {
-        if fetch_version_details(self).await?.shared_mappings {
-            Ok(self.id.clone())
-        } else {
-            Ok(self.id.clone() + "-" + side.id())
-        }
-    }
-
     pub async fn get_jar_download_url(
         &self,
         side: &GameSide,
@@ -122,8 +128,6 @@ impl MinecraftVersion {
 #[derive(Deserialize)]
 pub struct VersionDetails {
     libraries: Option<Value>,
-    #[serde(rename(deserialize = "sharedMappings"))]
-    shared_mappings: bool,
     #[serde(rename(deserialize = "normalizedVersion"))]
     normalized_version: String,
     downloads: VersionDownloads,

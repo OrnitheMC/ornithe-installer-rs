@@ -13,12 +13,13 @@ use crate::{
     errors::InstallerError,
     net::{
         manifest::MinecraftVersion,
-        meta::{LoaderType, LoaderVersion},
+        meta::{IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
 
 pub async fn install(
     version: MinecraftVersion,
+    intermediary: IntermediaryVersion,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
     generation: Option<u32>,
@@ -27,6 +28,7 @@ pub async fn install(
 ) -> Result<(), InstallerError> {
     install_path(
         &version,
+        &intermediary,
         &loader_type,
         &loader_version,
         &generation,
@@ -48,6 +50,7 @@ pub async fn install(
 
 async fn install_path(
     version: &MinecraftVersion,
+    intermediary: &IntermediaryVersion,
     loader_type: &LoaderType,
     loader_version: &LoaderVersion,
     generation: &Option<u32>,
@@ -76,7 +79,7 @@ async fn install_path(
 
     let (_, launch_json) = crate::net::meta::fetch_launch_json(
         crate::net::GameSide::Server,
-        version,
+        intermediary,
         loader_type,
         loader_version,
         generation,
@@ -302,6 +305,7 @@ fn split_artifact(artifact: &str) -> String {
 
 pub async fn install_and_run<I, S>(
     version: MinecraftVersion,
+    intermediary: IntermediaryVersion,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
     generation: Option<u32>,
@@ -328,6 +332,7 @@ where
     if needs_install {
         install_path(
             &version,
+            &intermediary,
             &loader_type,
             &loader_version,
             &generation,

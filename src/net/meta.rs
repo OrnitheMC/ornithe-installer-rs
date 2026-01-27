@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::errors::InstallerError;
 
-use super::{GameSide, manifest::MinecraftVersion};
+use super::GameSide;
 
 const META_URL: &str = "https://meta.ornithemc.net";
 
@@ -75,7 +75,7 @@ impl GameSide {
 
 pub async fn fetch_launch_json(
     side: GameSide,
-    version: &MinecraftVersion,
+    intermediary: &IntermediaryVersion,
     loader_type: &LoaderType,
     loader_version: &LoaderVersion,
     generation: &Option<u32>,
@@ -91,7 +91,7 @@ pub async fn fetch_launch_json(
             META_URL.to_owned()
                 + &endpoint
                     .replacen("{}", loader_type.get_name(), 1)
-                    .replacen("{}", version.get_id(&side).await?.as_str(), 1)
+                    .replacen("{}", &intermediary.version, 1)
                     .replacen("{}", &loader_version.version, 1),
         )
         .send()
@@ -106,13 +106,7 @@ pub async fn fetch_launch_json(
         .to_owned();
 
     let library_upgrades = super::CLIENT
-        .get(
-            META_URL.to_owned()
-                + &format!(
-                    "/v3/versions/libraries/{}",
-                    version.get_id(&side).await?.as_str()
-                ),
-        )
+        .get(META_URL.to_owned() + &format!("/v3/versions/libraries/{}", &intermediary.version))
         .send()
         .await?
         .json::<Vec<ProfileJsonLibrary>>()

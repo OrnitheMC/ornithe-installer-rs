@@ -9,12 +9,13 @@ use crate::{
     errors::InstallerError,
     net::{
         manifest::{self, MinecraftVersion},
-        meta::{self, LoaderType, LoaderVersion},
+        meta::{self, IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
 
 pub async fn install(
     version: MinecraftVersion,
+    intermediary: IntermediaryVersion,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
     generation: Option<u32>,
@@ -44,7 +45,7 @@ pub async fn install(
 
     let (profile_name, ornithe_launch_json) = meta::fetch_launch_json(
         crate::net::GameSide::Client,
-        &version,
+        &intermediary,
         &loader_type,
         &loader_version,
         &generation,

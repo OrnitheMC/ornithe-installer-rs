@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs::File, io::Write, path::PathBuf};
+use std::{fs::File, io::Write, path::PathBuf};
 
 use arboard::Clipboard;
 use log::info;
@@ -20,7 +20,7 @@ const MMC_PACK: &str = include_str!("../../res/packformat/mmc-pack.json");
 
 pub async fn install(
     version: MinecraftVersion,
-    intermediary_versions: HashMap<String, IntermediaryVersion>,
+    intermediary_version: IntermediaryVersion,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
     output_dir: PathBuf,
@@ -34,13 +34,6 @@ pub async fn install(
     let output_dir = output_dir.canonicalize()?;
 
     info!("Fetching version information...");
-    let version_id = version.get_id(&crate::net::GameSide::Client).await?;
-    let intermediary_version = intermediary_versions
-        .get(&version_id)
-        .ok_or(InstallerError(
-            "Could not find matching intermediary version".to_owned(),
-        ))?;
-
     let intermediary_maven = intermediary_version
         .maven
         .clone()
@@ -240,7 +233,7 @@ async fn get_mmc_launch_json(
     let vanilla_libraries = libraries.as_array_mut().unwrap();
     vanilla_libraries.retain(|lib| {
         let name = lib["name"].as_str().unwrap_or_default();
-        !name.contains("org.ow2.asm") && !name.contains("org.lwjgl")
+        !name.contains("org.ow2.asm")
     });
 
     let mut traits = Vec::new();
