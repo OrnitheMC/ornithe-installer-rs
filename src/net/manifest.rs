@@ -147,7 +147,9 @@ pub struct VersionDownload {
     pub url: String,
 }
 
-pub async fn find_lwjgl_version(version: &MinecraftVersion) -> Result<String, InstallerError> {
+pub async fn find_lwjgl_url_version(
+    version: &MinecraftVersion,
+) -> Result<(String, String), InstallerError> {
     let details = super::CLIENT
         .get(&version.url)
         .send()
@@ -162,7 +164,13 @@ pub async fn find_lwjgl_version(version: &MinecraftVersion) -> Result<String, In
                 let mut name = name.as_str().unwrap().split(":").skip(1);
                 let artifact = name.next().unwrap();
                 if artifact == "lwjgl" {
-                    return Ok(name.next().unwrap().to_owned());
+                    return Ok((
+                        library["artifact"]["url"]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string(),
+                        name.next().unwrap().to_owned(),
+                    ));
                 }
             }
         }

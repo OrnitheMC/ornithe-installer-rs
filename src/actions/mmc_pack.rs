@@ -44,7 +44,7 @@ pub async fn install(
         ))?
         .to_owned();
 
-    let lwjgl_version = manifest::find_lwjgl_version(&version).await?;
+    let (lwjgl_url, lwjgl_version) = manifest::find_lwjgl_url_version(&version).await?;
 
     let calamus_gen = match generation {
         Some(g) => g,
@@ -159,6 +159,27 @@ pub async fn install(
             "cachedVersion": version,
             "uid": uid
         }));
+    }
+
+    if !lwjgl_url.starts_with("https://libraries.minecraft.net") {
+        let lwjgl_major = lwjgl_version.chars().next().unwrap();
+        let uid = "org.".to_string()
+            + if lwjgl_major == '3' {
+                "lwjgl3"
+            } else {
+                "lwjgl"
+            };
+        zip.write_file(
+            &format!("patches/{}.json", &uid),
+            serde_json::to_string(&json!({
+                "formatVersion": 1,
+                "name": "LWJGL ".to_string()+&lwjgl_major.to_string(),
+                "type": "release",
+                "uid": &uid,
+                "version": &lwjgl_version
+            }))?
+            .as_bytes(),
+        )?;
     }
 
     zip.write_file(
