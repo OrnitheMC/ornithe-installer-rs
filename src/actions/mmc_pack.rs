@@ -8,6 +8,7 @@ use zip::{ZipWriter, write::SimpleFileOptions};
 use crate::{
     errors::InstallerError,
     net::{
+        GameSide,
         manifest::{self, MinecraftVersion},
         meta::{self, IntermediaryVersion, LoaderType, LoaderVersion},
     },
@@ -67,7 +68,16 @@ pub async fn install(
         transform_intermediary_patch(&version, &intermediary_version.version, &intermediary_maven)
             .await?;
 
-    let minecraft_patch_json = get_mmc_launch_json(&version, &lwjgl_version).await?;
+    let (_, ornithe_launch_json) = meta::fetch_launch_json(
+        GameSide::Client,
+        &intermediary_version,
+        &loader_type,
+        &loader_version,
+        &generation,
+    )
+    .await?;
+    let minecraft_patch_json =
+        get_mmc_launch_json(&version, &lwjgl_version, &ornithe_launch_json).await?;
 
     let profile_name = format!(
         "Ornithe Gen{calamus_gen} {} {}",
@@ -215,6 +225,7 @@ async fn transform_pack_json(
 async fn get_mmc_launch_json(
     version: &MinecraftVersion,
     lwjgl_version: &String,
+    ornithe_launch_json: &Value,
 ) -> Result<String, InstallerError> {
     let client_name = format!("com.mojang:minecraft:{}:client", version.id);
     let (_, vanilla_launch_json) = manifest::fetch_launch_json(version).await?;
@@ -268,7 +279,7 @@ async fn get_mmc_launch_json(
     let lwjgl_major = lwjgl_version.chars().next().unwrap();
     let mut json = json!({
         "assetIndex": vanilla_json["assetIndex"],
-        "compatibleJavaMajors": [8, 17, 21, 25],
+        "compatibleJavaMajors": [25, 21, 17, 8],
         "compatibleJavaName": "java-runtime-epsilon",
         "formatVersion":1,
         "libraries": vanilla_libraries,
@@ -296,7 +307,7 @@ async fn get_mmc_launch_json(
             .insert("+traits".to_owned(), json!(traits));
     }
 
-    if let Some(jvm_arguments) = vanilla_json["arguments"]["jvm"].as_array() {
+    if let Some(jvm_arguments) = ornithe_launch_json["arguments"]["jvm"].as_array() {
         json.as_object_mut()
             .unwrap()
             .insert("+jvmArgs".to_owned(), json!(jvm_arguments));
