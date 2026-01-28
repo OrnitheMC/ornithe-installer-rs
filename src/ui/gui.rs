@@ -4,7 +4,7 @@ use std::{
     sync::mpsc::{Receiver, Sender},
 };
 
-use egui::{Button, ComboBox, RichText, Sense, Theme, Vec2};
+use egui::{Button, ComboBox, Frame, RichText, Sense, Theme, Vec2, style::ScrollStyle};
 use log::{error, info};
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
 use tokio::task::JoinHandle;
@@ -260,7 +260,11 @@ impl App {
                     &self.filtered_minecraft_versions,
                     "minecraft_version",
                     &mut self.selected_minecraft_version,
-                    |ui, text| ui.selectable_label(false, text),
+                    |ui, text| {
+                        Button::selectable(false, text)
+                            .min_size(Vec2::new(ui.available_width(), 0.0))
+                            .ui(ui)
+                    },
                     &mut self.minecraft_version_dropdown_open,
                 )
                 .max_height(130.0)
@@ -404,7 +408,14 @@ impl App {
                     let loader_type = self.selected_loader_type.clone();
                     let location = Path::new(&self.client_install_location).to_path_buf();
                     let create_profile = self.create_profile;
-                    let intermediary_version = self.get_intermediary_version(&selected_version);
+                    let intermediary_version =
+                        match self.get_intermediary_version(&selected_version) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                display_dialog("Installation Failed", &e.0);
+                                return;
+                            }
+                        };
                     let handle = tokio::spawn(async move {
                         crate::actions::client::install(
                             selected_version,
@@ -423,7 +434,14 @@ impl App {
                     let loader_type = self.selected_loader_type.clone();
                     let location = Path::new(&self.server_install_location).to_path_buf();
                     let download_server = self.download_minecraft_server;
-                    let intermediary_version = self.get_intermediary_version(&selected_version);
+                    let intermediary_version =
+                        match self.get_intermediary_version(&selected_version) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                display_dialog("Installation Failed", &e.0);
+                                return;
+                            }
+                        };
                     self.installation_task = Some(tokio::spawn(async move {
                         crate::actions::server::install(
                             selected_version,
@@ -442,7 +460,14 @@ impl App {
                     let location = Path::new(&self.mmc_output_location).to_path_buf();
                     let copy_profile_path = self.copy_generated_location;
                     let generate_zip = self.generate_zip;
-                    let intermediary_version = self.get_intermediary_version(&selected_version);
+                    let intermediary_version =
+                        match self.get_intermediary_version(&selected_version) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                display_dialog("Installation Failed", &e.0);
+                                return;
+                            }
+                        };
                     let handle = tokio::spawn(async move {
                         crate::actions::mmc_pack::install(
                             selected_version,
@@ -522,15 +547,25 @@ impl App {
         }
     }
 
-    fn get_intermediary_version(&self, selected_version: &MinecraftVersion) -> IntermediaryVersion {
+    fn get_intermediary_version(
+        &self,
+        selected_version: &MinecraftVersion,
+    ) -> Result<IntermediaryVersion, InstallerError> {
         self.intermediary_versions
             .get(&selected_version.id)
             .or_else(|| {
                 self.intermediary_versions
                     .get(&(selected_version.id.to_owned() + "-client"))
             })
-            .unwrap()
-            .clone()
+            .or_else(|| {
+                self.intermediary_versions
+                    .get(&(selected_version.id.to_owned() + "-server"))
+            })
+            .map(|v| v.clone())
+            .ok_or(InstallerError(
+                "Failed to find matching intermediary version for ".to_owned()
+                    + &selected_version.id,
+            ))
     }
 }
 
@@ -702,21 +737,26 @@ impl<F: FnMut(&mut Ui, &str) -> Response, V: AsRef<str>, I: Iterator<Item = V>> 
         }
 
         let mut changed = false;
+        let frame = Frame::popup(ui.style());
+        let padding = frame.inner_margin.rightf();
         if let Some(popup_response) = egui::Popup::new(
             popup_id,
             ui.ctx().clone(),
             r.rect.left_bottom(),
             ui.layer_id(),
         )
+        .frame(frame)
         .open(*open)
         .show(|ui| {
             if let Some(max) = max_height {
                 ui.set_max_height(max);
             }
-
             ScrollArea::vertical()
                 .max_height(f32::INFINITY)
                 .show(ui, |ui| {
+                    if let Some(width) = desired_width {
+                        ui.set_width(width - padding);
+                    }
                     for var in it {
                         let text = var.as_ref();
                         if filter_by_input
