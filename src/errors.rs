@@ -12,7 +12,7 @@ impl From<eframe::Error> for InstallerError {
 
 impl From<reqwest::Error> for InstallerError {
     fn from(value: reqwest::Error) -> Self {
-        InstallerError(format!("{}", value))
+        InstallerError(format!("{:?}", value))
     }
 }
 

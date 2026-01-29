@@ -4,7 +4,7 @@ use std::{
     sync::mpsc::{Receiver, Sender},
 };
 
-use egui::{Button, ComboBox, Frame, RichText, Sense, Theme, Vec2, style::ScrollStyle};
+use egui::{Button, ComboBox, Frame, RichText, Sense, Theme, Vec2};
 use log::{error, info};
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
 use tokio::task::JoinHandle;
