@@ -16,6 +16,7 @@ const MAVEN_LATEST_RELEASE_API_URL: &str =
 #[derive(Deserialize)]
 pub struct MavenVersion {
     #[serde(rename(deserialize = "isSnapshot"))]
+    #[allow(unused)]
     pub is_snapshot: bool,
     pub version: String,
 }

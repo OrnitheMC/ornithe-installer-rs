@@ -1,18 +1,22 @@
 use std::{
     ffi::OsStr,
-    io::Write,
-    path::PathBuf,
+    io::{Cursor, Read, Write},
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
 use log::info;
+use serde_json::json;
 use tokio::task::JoinSet;
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
+
+const SERVER_LAUNCHER_JAR: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ServerLauncher.jar"));
 
 use crate::{
     errors::InstallerError,
     net::{
         manifest::MinecraftVersion,
+        maven,
         meta::{IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
@@ -113,6 +117,15 @@ async fn install_path(
         }
     }
 
+    let jvm_args = launch_json["arguments"]["jvm"]
+        .as_array()
+        .unwrap_or(&Vec::new())
+        .iter()
+        .map(|v| v.as_str())
+        .filter(|opt| opt.is_some())
+        .map(|opt| opt.unwrap().to_string())
+        .collect::<Vec<_>>();
+
     let libraries = launch_json["libraries"]
         .as_array()
         .ok_or(InstallerError("No libraries were specified".to_owned()))?;
@@ -120,6 +133,7 @@ async fn install_path(
     let mut library_files = JoinSet::new();
 
     let mut fabric_loader_artifact = None;
+    let library_dir = location.join("libraries");
     for library in libraries {
         let name = library["name"]
             .as_str()
@@ -133,8 +147,22 @@ async fn install_path(
         if name.matches("net\\.fabricmc:fabric-loader:.*").count() > 0 {
             fabric_loader_artifact = Some(name.clone());
         }
-        let dir = location.join("libraries");
+
+        let dir = library_dir.clone();
         library_files.spawn(async move { download_library(&dir, name, url).await });
+    }
+
+    let flap_version = maven::get_latest_version("flap").await?;
+    let flap_path = library_dir.join(format!(
+        "net/ornithemc/flap/flap-{}.jar",
+        flap_version.version
+    ));
+    {
+        let out_path = flap_path.clone();
+        library_files.spawn(async move {
+            maven::download_latest_release("flap", &out_path).await?;
+            Ok(out_path)
+        });
     }
 
     let mut downloaded_library_files = Vec::new();
@@ -174,6 +202,8 @@ async fn install_path(
         main_class,
         &launch_main_class,
         &downloaded_library_files,
+        jvm_args,
+        flap_path.strip_prefix(&location.canonicalize()?)?,
     )
     .await?;
 
@@ -195,6 +225,8 @@ async fn create_launch_jar(
     main_class: &str,
     launch_main_class: &str,
     library_files: &Vec<PathBuf>,
+    jvm_args: Vec<String>,
+    flap_jar_path: &Path,
 ) -> Result<(), InstallerError> {
     let jar_out = install_location.join(loader_type.get_name().to_owned() + "-server-launch.jar");
     if jar_out.exists() {
@@ -203,16 +235,22 @@ async fn create_launch_jar(
 
     let file = std::fs::File::create(jar_out)?;
     let mut zip = ZipWriter::new(file);
+    let mut launch_jar = ZipArchive::new(Cursor::new(SERVER_LAUNCHER_JAR))?;
+    let mut manifest = Vec::new();
+    for i in 0..launch_jar.len() {
+        let f = launch_jar.by_index_raw(i)?;
+        match f.enclosed_name() {
+            Some(p) if p == Path::new("META-INF/MANIFEST.MF") => (),
+            _ => zip.raw_copy_file(f)?,
+        }
+    }
 
+    let mut jar_manifest = launch_jar.by_path("META-INF/MANIFEST.MF")?;
+    let mut mf = String::new();
+    jar_manifest.read_to_string(&mut mf)?;
+    write!(manifest, "{}", mf.replace("\n\r\n", "\n"))?;
     zip.start_file("META-INF/MANIFEST.MF", SimpleFileOptions::default())?;
 
-    let mut manifest = Vec::new();
-    writeln!(manifest, "Manifest-Version: 1.0\r")?;
-    writeln!(
-        manifest,
-        "{}\r",
-        wrap_manifest_line(&format!("Main-Class: {}", launch_main_class))
-    )?;
     let mut class_path = String::from("Class-Path: ");
     for library in library_files {
         let relative = library.strip_prefix(install_location)?.to_str();
@@ -228,7 +266,14 @@ async fn create_launch_jar(
         wrap_manifest_line(&format!("Minecraft-Version: {}\r", version.id))
     )?;
     zip.write_all(&manifest)?;
-    zip.add_directory("META-INF", SimpleFileOptions::default())?;
+    //zip.add_directory("META-INF", SimpleFileOptions::default())?;
+
+    zip.start_file("ornithe-args.json", SimpleFileOptions::default())?;
+    zip.write_all(&serde_json::to_vec(&json!({
+        "flap_jar": flap_jar_path,
+        "main_class": launch_main_class,
+        "jvm_args": jvm_args
+    }))?)?;
 
     if loader_type == &LoaderType::Fabric {
         zip.start_file(

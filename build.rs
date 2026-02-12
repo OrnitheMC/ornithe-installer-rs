@@ -1,3 +1,5 @@
+use std::{env, process::Command};
+
 extern crate embed_resource;
 
 fn main() {
@@ -15,4 +17,20 @@ fn main() {
             .compile()
             .expect("Failed to set windows resources");
     }
+
+    Command::new(format!(
+        "{}/{}",
+        env::var("CARGO_MANIFEST_DIR").unwrap(),
+        if cfg!(windows) {
+            "gradlew.bat"
+        } else {
+            "gradlew"
+        }
+    ))
+    .arg(":java:assemble")
+    .status()
+    .expect("Gradle build should succeed");
+    println!("cargo::rerun-if-changed=java/build.gradle.kts");
+    println!("cargo::rerun-if-changed=java/src");
+    println!("cargo::rerun-if-changed=res/windows");
 }
