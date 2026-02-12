@@ -3,12 +3,13 @@ use std::path::PathBuf;
 use base64::{Engine, prelude::BASE64_STANDARD_NO_PAD};
 use chrono::Utc;
 use log::info;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use crate::{
     errors::InstallerError,
     net::{
         manifest::{self, MinecraftVersion},
+        maven,
         meta::{self, IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
@@ -43,7 +44,7 @@ pub async fn install(
     info!("Fetching launch jsons..");
     let (vanilla_profile_name, vanilla_launch_json) = manifest::fetch_launch_json(&version).await?;
 
-    let (profile_name, ornithe_launch_json) = meta::fetch_launch_json(
+    let (profile_name, mut ornithe_launch_json) = meta::fetch_launch_json(
         crate::net::GameSide::Client,
         &intermediary,
         &loader_type,
@@ -59,12 +60,35 @@ pub async fn install(
     let vanilla_profile_json = vanilla_profile_dir.join(vanilla_profile_name.clone() + ".json");
     let profile_dir = versions_dir.join(&profile_name);
     let profile_json = profile_dir.join(profile_name.clone() + ".json");
+    let flap_jar = profile_dir.join("flap.jar");
 
     if std::fs::exists(&vanilla_profile_dir).unwrap_or_default() {
         std::fs::remove_dir_all(&vanilla_profile_dir)?;
     }
     if std::fs::exists(&profile_dir).unwrap_or_default() {
         std::fs::remove_dir_all(&profile_dir)?;
+    }
+
+    maven::download_latest_release("flap", &flap_jar).await?;
+
+    if let Some(obj) = ornithe_launch_json.as_object_mut() {
+        if !obj.contains_key("arguments") {
+            let a = Value::Object(Map::new());
+            obj.insert("arguments".to_string(), a);
+        };
+        let arguments = obj.get_mut("arguments").unwrap();
+        if let Some(args) = arguments.as_object_mut() {
+            if !args.contains_key("jvm") {
+                args.insert("jvm".to_string(), Value::Array(Vec::new()));
+            }
+            let jvm_args = args.get_mut("jvm").unwrap().as_array_mut();
+            if let Some(jvm) = jvm_args {
+                jvm.insert(
+                    0,
+                    json!(format!("-javaagent:{}", flap_jar.to_string_lossy())),
+                );
+            }
+        }
     }
 
     info!("Creating files..");

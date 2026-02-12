@@ -10,6 +10,7 @@ use crate::{
     net::{
         GameSide,
         manifest::{self, MinecraftVersion},
+        maven::{self, MavenVersion},
         meta::{self, IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
@@ -97,6 +98,11 @@ pub async fn install(
 
     info!("Fetching library information...");
 
+    let MavenVersion {
+        version: flap_version,
+        ..
+    } = maven::get_latest_version("flap").await?;
+
     let extra_libs = meta::fetch_profile_libraries(&version.id).await?;
     info!("Found {} library upgrade patches", extra_libs.len());
 
@@ -181,6 +187,27 @@ pub async fn install(
             .as_bytes(),
         )?;
     }
+
+    zip.write_file(
+        "patches/net.ornithemc.flap.json",
+        serde_json::to_string(&json!({
+            "formatVersion": 1,
+            "name": "Flap",
+            "type": "release",
+            "uid": "net.ornithemc.flap",
+            "version": flap_version,
+            "+agents": [{
+                "name": format!("net.ornithemc:flap:{}", flap_version),
+                "url": maven::MAVEN_URL
+            }]
+        }))?
+        .as_bytes(),
+    )?;
+    pack_components.push(json!({
+        "cachedName": "Flap",
+        "cachedVersion": flap_version,
+        "uid": "net.ornithemc.flap"
+    }));
 
     zip.write_file(
         "mmc-pack.json",

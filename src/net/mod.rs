@@ -5,6 +5,7 @@ use reqwest::Client;
 use crate::errors::InstallerError;
 
 pub mod manifest;
+pub mod maven;
 pub mod meta;
 
 static CLIENT: LazyLock<Client> = LazyLock::new(|| {
