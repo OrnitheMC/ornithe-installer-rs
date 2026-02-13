@@ -266,7 +266,6 @@ async fn create_launch_jar(
         wrap_manifest_line(&format!("Minecraft-Version: {}\r", version.id))
     )?;
     zip.write_all(&manifest)?;
-    //zip.add_directory("META-INF", SimpleFileOptions::default())?;
 
     zip.start_file("ornithe-args.json", SimpleFileOptions::default())?;
     zip.write_all(&serde_json::to_vec(&json!({
@@ -317,7 +316,7 @@ fn read_jar_manifest_attribute(
     if let Some(line) = main_class_line {
         let class = line.strip_prefix(attribute);
         if let Some(name) = class {
-            return Ok(name.to_owned());
+            return Ok(name.trim_ascii().to_owned());
         }
     }
 
@@ -357,7 +356,7 @@ pub async fn install_and_run<I, S>(
     location: PathBuf,
     java: Option<&PathBuf>,
     args: Option<I>,
-) -> Result<(), InstallerError>
+) -> Result<bool, InstallerError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -370,7 +369,7 @@ where
 
     if !needs_install {
         needs_install = read_jar_manifest_attribute(&launch_jar, "Minecraft-Version")
-            .map(|v| v != version.id)
+            .map(|v| v.trim_ascii() != version.id)
             .unwrap_or(true);
     }
 
@@ -406,5 +405,5 @@ where
     cmd.arg("-jar").arg(jar).arg("nogui");
     cmd.status()?;
 
-    Ok(())
+    Ok(needs_install)
 }

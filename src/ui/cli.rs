@@ -108,7 +108,9 @@ pub async fn run() {
         }
         Err(e) => {
             std::io::stderr()
-                .write_all(("Failed to load Ornithe Installer CLI: ".to_owned() + &e.0).as_bytes())
+                .write_all(
+                    ("Error while running Ornithe Installer CLI: ".to_owned() + &e.0).as_bytes(),
+                )
                 .expect("Failed to print error!");
         }
     }
@@ -219,7 +221,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         if let Some(matches) = matches.subcommand_matches("run") {
             let java = matches.get_one::<PathBuf>("java");
             let run_args = matches.get_one::<String>("args");
-            crate::actions::server::install_and_run(
+            let installed = crate::actions::server::install_and_run(
                 minecraft_version,
                 intermediary,
                 loader_type,
@@ -230,7 +232,10 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
                 run_args.map(|s| s.split(" ")),
             )
             .await?;
-            return Ok(InstallationResult::Installed);
+            return Ok(match installed {
+                true => InstallationResult::Installed,
+                false => InstallationResult::NotInstalled,
+            });
         }
         crate::actions::server::install(
             minecraft_version,
