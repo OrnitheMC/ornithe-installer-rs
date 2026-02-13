@@ -1,4 +1,4 @@
-use std::{env, process::Command};
+use std::{env, path::PathBuf, process::Command};
 
 extern crate embed_resource;
 
@@ -18,19 +18,29 @@ fn main() {
             .expect("Failed to set windows resources");
     }
 
-    Command::new(format!(
-        "{}/{}",
-        env::var("CARGO_MANIFEST_DIR").unwrap(),
-        if cfg!(windows) {
-            "gradlew.bat"
-        } else {
-            "gradlew"
-        }
-    ))
-    .arg(":java:assemble")
-    .arg("--stacktrace")
-    .status()
-    .expect("Gradle build should succeed");
+    let proj_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    if env::var("CI").is_ok() {
+        let mut server_launcher = PathBuf::from(&proj_dir);
+        let mut out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+        out_dir.push("ServerLauncher.jar");
+        server_launcher.push("ServerLauncher.jar");
+        std::fs::copy(server_launcher, out_dir)
+            .expect("Copying should be available, need ServerLauncher to embed!");
+    } else {
+        Command::new(format!(
+            "{}/{}",
+            &proj_dir,
+            if cfg!(windows) {
+                "gradlew.bat"
+            } else {
+                "gradlew"
+            }
+        ))
+        .arg(":java:assemble")
+        .arg("--stacktrace")
+        .status()
+        .expect("Gradle build should succeed");
+    }
     println!("cargo::rerun-if-changed=java/build.gradle.kts");
     println!("cargo::rerun-if-changed=java/src");
     println!("cargo::rerun-if-changed=res/windows");
