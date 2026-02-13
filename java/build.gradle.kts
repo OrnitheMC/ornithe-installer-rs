@@ -36,7 +36,6 @@ tasks.jar {
 
 tasks.shadowJar {
     exclude("META-INF/MANIFEST.MF")
-    archiveClassifier = ""
     relocate("com.google.gson", "net.ornithemc.flap.lib.gson") // use flap's shadowed gson because we know it supports record deserialization
 }
 
@@ -44,7 +43,6 @@ tasks.downgradeJar {
     dependsOn(tasks.jar)
     dependsOn(tasks.shadowJar)
     inputFile.set(tasks.shadowJar.get().archiveFile)
-    archiveClassifier = ""
 }
 
 tasks.shadeDowngradedApi {
