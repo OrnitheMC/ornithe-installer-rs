@@ -148,7 +148,7 @@ jobs:
       - run: cargo install cross --git https://github.com/cross-rs/cross
       - run: rustup target add ${{ matrix.target }}
       - name: Build
-        run: cross build -vv --target ${{ matrix.target }}
+        run: cross build --verbose --target ${{ matrix.target }}
       - name: Build release binary
         run: cross build --release --target ${{ matrix.target }}
       - name: Upload a Build Artifact
