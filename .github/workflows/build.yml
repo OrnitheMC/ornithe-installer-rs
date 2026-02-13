@@ -35,6 +35,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "microsoft"
+          java-version: 21
       - name: Install C toolchain (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
@@ -70,6 +75,11 @@ jobs:
     container: ghcr.io/rust-cross/cargo-zigbuild:0.20
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "microsoft"
+          java-version: 21
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -99,6 +109,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "microsoft"
+          java-version: 21
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:

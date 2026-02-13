@@ -33,6 +33,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "microsoft"
+          java-version: 21
       - name: Install C toolchain (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
@@ -45,11 +50,6 @@ jobs:
           packages: libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev libgtk-3-dev # libgtk-3-dev is used by rfd
           version: 1.0
           execute_install_scripts: true
-      - uses: actions/setup-java@v4
-        with:
-          distribution: "microsoft"
-          java-version: "21"
-          cache: "gradle"
       - uses: gradle/actions/wrapper-validation@v3
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -91,7 +91,8 @@ jobs:
     container: ghcr.io/rust-cross/cargo-zigbuild:0.20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: "microsoft"
           java-version: "21"
@@ -165,7 +166,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: "Setup Java"
+        uses: actions/setup-java@v4
         with:
           distribution: "microsoft"
           java-version: "21"
