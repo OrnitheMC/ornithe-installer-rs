@@ -27,7 +27,7 @@ fn main() {
             "gradlew"
         }
     ))
-    .arg(":java:assemble")
+    .arg(":java:assemble --stacktrace")
     .status()
     .expect("Gradle build should succeed");
     println!("cargo::rerun-if-changed=java/build.gradle.kts");
