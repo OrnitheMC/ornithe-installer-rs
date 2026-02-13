@@ -1,13 +1,12 @@
-@file:OptIn(ExperimentalPathApi::class)
-
-import java.nio.file.FileSystems
-import kotlin.io.path.ExperimentalPathApi
-import kotlin.io.path.deleteIfExists
-
 plugins {
     java
     id("com.gradleup.shadow") version "9.3.+"
     id("xyz.wagyourtail.jvmdowngrader") version "1.3.4"
+}
+
+java {
+    targetCompatibility = JavaVersion.VERSION_21
+    sourceCompatibility = JavaVersion.VERSION_21
 }
 
 base {
