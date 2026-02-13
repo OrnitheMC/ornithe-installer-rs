@@ -59,7 +59,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: rustup target add ${{ matrix.target }}
       - name: Build
-        run: cargo build --verbose --target ${{ matrix.target }}
+        run: cargo build -vv --target ${{ matrix.target }}
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
       - name: Upload a Build Artifact
@@ -88,7 +88,7 @@ jobs:
       - run: rustup target add aarch64-apple-darwin
       - run: rustup target add x86_64-apple-darwin
       - name: Build
-        run: cargo zigbuild --verbose --target universal2-apple-darwin
+        run: cargo zigbuild -vv --target universal2-apple-darwin
       - name: Build release binary
         run: cargo zigbuild --release --target universal2-apple-darwin
       - name: Upload a Build Artifact
@@ -124,7 +124,7 @@ jobs:
       - run: cargo install cross --git https://github.com/cross-rs/cross
       - run: rustup target add ${{ matrix.target }}
       - name: Build
-        run: cross build --verbose --target ${{ matrix.target }}
+        run: cross build -vv --target ${{ matrix.target }}
       - name: Build release binary
         run: cross build --release --target ${{ matrix.target }}
       - name: Upload a Build Artifact
