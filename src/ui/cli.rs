@@ -1,7 +1,8 @@
 use std::{collections::HashMap, io::Write, path::PathBuf};
 
 use clap::{ArgMatches, Command, arg, command, value_parser};
-use log::info;
+use indicatif::{ProgressBar, ProgressStyle};
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
 use crate::{
     errors::InstallerError,
@@ -98,12 +99,12 @@ pub async fn run() {
     match parse(matches).await {
         Ok(r) => {
             if r == InstallationResult::Installed {
-                info!("Installation complete!");
-                info!("Ornithe has been successfully installed.");
-                info!(
+                println!("Installation complete!");
+                println!("Ornithe has been successfully installed.");
+                println!(
                     "Most mods require that you also download the Ornithe Standard Libraries mod and place it in your mods folder."
                 );
-                info!("You can find it at {}", crate::OSL_MODRINTH_URL);
+                println!("You can find it at {}", crate::OSL_MODRINTH_URL);
             }
         }
         Err(e) => {
@@ -188,8 +189,34 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         return Ok(InstallationResult::NotInstalled);
     }
 
-    let loader_versions = crate::net::meta::fetch_loader_versions().await?;
+    let (send, mut recv) = unbounded_channel();
 
+    let fut = tokio::spawn(do_install(send, matches));
+    let pb = ProgressBar::new(100).with_style(
+        ProgressStyle::with_template("{spinner:.green} [{wide_bar:.cyan/blue}]")
+            .unwrap()
+            .progress_chars("#>-"),
+    );
+    pb.set_position(0);
+
+    while !fut.is_finished() && !recv.is_empty() {
+        match recv.try_recv() {
+            Ok((prog, msg)) => {
+                pb.println(msg);
+                pb.set_position((prog * 100.0) as u64);
+            }
+            Err(_) => {}
+        }
+    }
+    pb.finish_and_clear();
+    return fut.await.unwrap();
+}
+
+async fn do_install(
+    send: UnboundedSender<(f32, String)>,
+    matches: ArgMatches,
+) -> Result<InstallationResult, InstallerError> {
+    let loader_versions = crate::net::meta::fetch_loader_versions().await?;
     if let Some(matches) = matches.subcommand_matches("client") {
         let (minecraft_version, intermediary, info) =
             get_minecraft_version(matches, GameSide::Client).await?;
@@ -199,6 +226,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         let location = matches.get_one::<PathBuf>("dir").unwrap().clone();
         let create_profile = matches.get_flag("generate-profile");
         crate::actions::client::install(
+            send,
             minecraft_version,
             intermediary,
             loader_type,
@@ -222,6 +250,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
             let java = matches.get_one::<PathBuf>("java");
             let run_args = matches.get_one::<String>("args");
             let installed = crate::actions::server::install_and_run(
+                send,
                 minecraft_version,
                 intermediary,
                 loader_type,
@@ -238,6 +267,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
             });
         }
         crate::actions::server::install(
+            send,
             minecraft_version,
             intermediary,
             loader_type,
@@ -263,6 +293,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
             .clone();
         let generate_zip = matches.get_one::<bool>("generate-zip").unwrap().clone();
         crate::actions::mmc_pack::install(
+            send,
             minecraft_version,
             intermediary,
             loader_type,

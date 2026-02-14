@@ -4,15 +4,20 @@ use std::{
     sync::mpsc::{Receiver, Sender},
 };
 
-use egui::{Button, ComboBox, Frame, RichText, Sense, Theme, Vec2};
+use egui::{
+    Button, Color32, ComboBox, FontId, Frame, ProgressBar, RichText, Sense, Theme, Vec2, Vec2b,
+};
 use log::{error, info};
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
-use tokio::task::JoinHandle;
+use tokio::{
+    sync::mpsc::{UnboundedReceiver, unbounded_channel},
+    task::JoinHandle,
+};
 
 use crate::{
     errors::InstallerError,
     net::{
-        self,
+        self, GameSide,
         manifest::MinecraftVersion,
         meta::{IntermediaryVersion, LoaderType, LoaderVersion},
     },
@@ -107,13 +112,50 @@ struct App {
     copy_generated_location: bool,
     generate_zip: bool,
     download_minecraft_server: bool,
-    installation_task: Option<JoinHandle<Result<(), InstallerError>>>,
+    installation_task: Option<InstallationProgress>,
     file_picker_channel: (
         Sender<Option<FilePickResult>>,
         Receiver<Option<FilePickResult>>,
     ),
     file_picker_open: bool,
     minecraft_version_dropdown_open: bool,
+}
+
+pub struct InstallationProgress {
+    last_progress: f32,
+    status: Vec<String>,
+    task: Option<(
+        UnboundedReceiver<(f32, String)>,
+        JoinHandle<Result<(), InstallerError>>,
+    )>,
+}
+
+impl InstallationProgress {
+    pub fn new(
+        task: (
+            UnboundedReceiver<(f32, String)>,
+            JoinHandle<Result<(), InstallerError>>,
+        ),
+    ) -> Self {
+        Self {
+            last_progress: 0.0,
+            status: Vec::new(),
+            task: Some(task),
+        }
+    }
+
+    pub fn poll(&mut self) {
+        if let Some((ref mut rec, _)) = self.task {
+            match rec.try_recv() {
+                Ok((progress, message)) => {
+                    info!("{}% - {}", (progress * 100.0) as i32, &message);
+                    self.last_progress = progress;
+                    self.status.push(message);
+                }
+                Err(_) => {}
+            }
+        }
+    }
 }
 
 struct FilePickResult {
@@ -403,47 +445,48 @@ impl App {
                 .find(|v| v.version == self.selected_loader_version)
                 .unwrap()
                 .clone();
+            let (sender, receiver) = unbounded_channel();
             match self.mode {
                 Mode::Client => {
                     let loader_type = self.selected_loader_type.clone();
                     let location = Path::new(&self.client_install_location).to_path_buf();
                     let create_profile = self.create_profile;
                     let intermediary_version =
-                        match self.get_intermediary_version(&selected_version) {
+                        match self.get_intermediary_version(&selected_version, GameSide::Client) {
                             Ok(v) => v,
                             Err(e) => {
                                 display_dialog("Installation Failed", &e.0);
                                 return;
                             }
                         };
-                    let handle = tokio::spawn(async move {
-                        crate::actions::client::install(
-                            selected_version,
-                            intermediary_version,
-                            loader_type,
-                            loader_version,
-                            None,
-                            location,
-                            create_profile,
-                        )
-                        .await
-                    });
-                    self.installation_task = Some(handle);
+                    let handle = tokio::spawn(crate::actions::client::install(
+                        sender,
+                        selected_version,
+                        intermediary_version,
+                        loader_type,
+                        loader_version,
+                        None,
+                        location,
+                        create_profile,
+                    ));
+                    self.installation_task = Some(InstallationProgress::new((receiver, handle)));
                 }
                 Mode::Server => {
                     let loader_type = self.selected_loader_type.clone();
                     let location = Path::new(&self.server_install_location).to_path_buf();
                     let download_server = self.download_minecraft_server;
                     let intermediary_version =
-                        match self.get_intermediary_version(&selected_version) {
+                        match self.get_intermediary_version(&selected_version, GameSide::Server) {
                             Ok(v) => v,
                             Err(e) => {
                                 display_dialog("Installation Failed", &e.0);
                                 return;
                             }
                         };
-                    self.installation_task = Some(tokio::spawn(async move {
-                        crate::actions::server::install(
+                    self.installation_task = Some(InstallationProgress::new((
+                        receiver,
+                        tokio::spawn(crate::actions::server::install(
+                            sender,
                             selected_version,
                             intermediary_version,
                             loader_type,
@@ -451,9 +494,8 @@ impl App {
                             None,
                             location,
                             download_server,
-                        )
-                        .await
-                    }));
+                        )),
+                    )));
                 }
                 Mode::MMC => {
                     let loader_type = self.selected_loader_type.clone();
@@ -461,27 +503,25 @@ impl App {
                     let copy_profile_path = self.copy_generated_location;
                     let generate_zip = self.generate_zip;
                     let intermediary_version =
-                        match self.get_intermediary_version(&selected_version) {
+                        match self.get_intermediary_version(&selected_version, GameSide::Client) {
                             Ok(v) => v,
                             Err(e) => {
                                 display_dialog("Installation Failed", &e.0);
                                 return;
                             }
                         };
-                    let handle = tokio::spawn(async move {
-                        crate::actions::mmc_pack::install(
-                            selected_version,
-                            intermediary_version,
-                            loader_type,
-                            loader_version,
-                            location,
-                            copy_profile_path,
-                            generate_zip,
-                            None,
-                        )
-                        .await
-                    });
-                    self.installation_task = Some(handle);
+                    let handle = tokio::spawn(crate::actions::mmc_pack::install(
+                        sender,
+                        selected_version,
+                        intermediary_version,
+                        loader_type,
+                        loader_version,
+                        location,
+                        copy_profile_path,
+                        generate_zip,
+                        None,
+                    ));
+                    self.installation_task = Some(InstallationProgress::new((receiver, handle)));
                 }
             }
         } else {
@@ -493,9 +533,13 @@ impl App {
     }
 
     fn monitor_installation(&mut self) {
-        if let Some(task) = &self.installation_task {
-            if task.is_finished() {
-                let handle = self.installation_task.take().unwrap();
+        if let Some(InstallationProgress { task: install, .. }) = &self.installation_task {
+            if install.as_ref().map(|t| t.1.is_finished()).unwrap_or(false) {
+                let prog = self.installation_task.as_mut().unwrap();
+                while !prog.task.as_ref().map(|t| t.0.is_empty()).unwrap_or(false) {
+                    prog.poll();
+                }
+                let (_, handle) = prog.task.take().unwrap();
                 tokio::spawn(async move {
                     match handle.await.unwrap() {
                         Err(e) => {
@@ -550,22 +594,23 @@ impl App {
     fn get_intermediary_version(
         &self,
         selected_version: &MinecraftVersion,
+        side: GameSide,
     ) -> Result<IntermediaryVersion, InstallerError> {
-        self.intermediary_versions
-            .get(&selected_version.id)
-            .or_else(|| {
+        let ver = self.intermediary_versions.get(&selected_version.id);
+        match side {
+            GameSide::Client => ver.or_else(|| {
                 self.intermediary_versions
                     .get(&(selected_version.id.to_owned() + "-client"))
-            })
-            .or_else(|| {
+            }),
+            GameSide::Server => ver.or_else(|| {
                 self.intermediary_versions
                     .get(&(selected_version.id.to_owned() + "-server"))
-            })
-            .map(|v| v.clone())
-            .ok_or(InstallerError(
-                "Failed to find matching intermediary version for ".to_owned()
-                    + &selected_version.id,
-            ))
+            }),
+        }
+        .map(|v| v.clone())
+        .ok_or(InstallerError(
+            "Failed to find matching intermediary version for ".to_owned() + &selected_version.id,
+        ))
     }
 }
 
@@ -590,6 +635,62 @@ impl eframe::App for App {
                 ui.vertical_centered(|ui| {
                     ui.heading("Ornithe Installer");
                 });
+                if self.installation_task.is_some() {
+                    ui.vertical(|ui| {
+                        let progress = self.installation_task.as_mut().unwrap();
+                        ui.add_space(15.0);
+                        progress.poll();
+
+                        ui.label("Output");
+                        let mut rect = ui.cursor();
+                        let mut output_height = ui.available_height() - 44.0;
+                        rect.set_width(ui.available_width());
+                        rect.set_height(output_height);
+                        ui.painter().rect_filled(rect, 8.0, Color32::LIGHT_GRAY);
+                        ui.add_space(4.0);
+                        output_height -= 10.0;
+                        ScrollArea::vertical()
+                            .auto_shrink(Vec2b::FALSE)
+                            .min_scrolled_height(output_height)
+                            .min_scrolled_width(ui.available_width())
+                            .max_height(output_height)
+                            .max_width(ui.available_width())
+                            .stick_to_bottom(true)
+                            .show(ui, |ui| {
+                                let text = progress.status.join("\n");
+                                TextEdit::multiline(&mut text.as_str())
+                                    .desired_width(ui.available_width())
+                                    .font(FontId::monospace(10.0))
+                                    .return_key(None)
+                                    .cursor_at_end(true)
+                                    .show(ui);
+                            });
+                        ui.add_space(4.0);
+                        ui.visuals_mut().override_text_color = Some(Color32::BLUE);
+                        ProgressBar::new(progress.last_progress)
+                            .desired_width(ui.available_width())
+                            .animate(true)
+                            .fill(Color32::LIGHT_BLUE)
+                            .ui(ui);
+                        ui.add_space(0.5);
+                    });
+                    ui.vertical_centered(|ui| {
+                        let mut back = Button::new(RichText::new("Back").heading());
+                        if self
+                            .installation_task
+                            .as_ref()
+                            .and_then(|t| t.task.as_ref())
+                            .map(|t| t.1.is_finished())
+                            .unwrap_or(false)
+                        {
+                            back = back.sense(Sense::empty());
+                        }
+                        if back.ui(ui).clicked() {
+                            self.installation_task = None;
+                        }
+                    });
+                    return;
+                }
                 ui.vertical(|ui| {
                     ui.add_space(15.0);
 
@@ -614,12 +715,11 @@ impl eframe::App for App {
 
                 ui.add_space(15.0);
                 ui.vertical_centered(|ui| {
-                    let mut install_button = Button::new(RichText::new("Install").heading())
-                        .min_size(Vec2::new(100.0, 0.0));
-                    if self.installation_task.is_some() {
-                        install_button = install_button.sense(Sense::empty());
-                    }
-                    if ui.add(install_button).clicked() {
+                    if Button::new(RichText::new("Install").heading())
+                        .min_size(Vec2::new(100.0, 0.0))
+                        .ui(ui)
+                        .clicked()
+                    {
                         self.run_installation();
                     }
                 });

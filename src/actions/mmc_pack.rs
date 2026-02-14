@@ -1,8 +1,8 @@
 use std::{fs::File, io::Write, path::PathBuf};
 
 use arboard::Clipboard;
-use log::info;
 use serde_json::{Value, json};
+use tokio::sync::mpsc::UnboundedSender;
 use zip::{ZipWriter, write::SimpleFileOptions};
 
 use crate::{
@@ -21,6 +21,7 @@ const INSTANCE_CONFIG: &str = include_str!("../../res/packformat/instance.cfg");
 const MMC_PACK: &str = include_str!("../../res/packformat/mmc-pack.json");
 
 pub async fn install(
+    sender: UnboundedSender<(f32, String)>,
     version: MinecraftVersion,
     intermediary_version: IntermediaryVersion,
     loader_type: LoaderType,
@@ -30,12 +31,22 @@ pub async fn install(
     generate_zip: bool,
     generation: Option<u32>,
 ) -> Result<(), InstallerError> {
+    let _ = sender.send((
+        0.1,
+        format!(
+            "Generating MMC/Prism instance for {} using {} Loader {} to {}",
+            version.id,
+            loader_type.get_localized_name(),
+            loader_version.version,
+            output_dir.display()
+        ),
+    ));
     if !output_dir.exists() {
         std::fs::create_dir_all(&output_dir)?;
     }
     let output_dir = output_dir.canonicalize()?;
 
-    info!("Fetching version information...");
+    let _ = sender.send((0.2, format!("Fetching version information...")));
     let intermediary_maven = intermediary_version
         .maven
         .clone()
@@ -52,7 +63,7 @@ pub async fn install(
         None => meta::fetch_intermediary_generations().await?.stable,
     };
 
-    info!("Transforming templates...");
+    let _ = sender.send((0.4, format!("Transforming templates...")));
 
     let mut transformed_pack_json = serde_json::from_str::<Value>(
         &transform_pack_json(
@@ -96,7 +107,7 @@ pub async fn install(
         dir
     };
 
-    info!("Fetching library information...");
+    let _ = sender.send((0.5, format!("Fetching library information...")));
 
     let MavenVersion {
         version: flap_version,
@@ -104,10 +115,13 @@ pub async fn install(
     } = maven::get_latest_version("flap").await?;
 
     let extra_libs = meta::fetch_profile_libraries(&version.id).await?;
-    info!("Found {} library upgrade patches", extra_libs.len());
+    let _ = sender.send((
+        0.6,
+        format!("Found {} library upgrade patches", extra_libs.len()),
+    ));
 
     let mut zip: Box<dyn Writer> = if generate_zip {
-        info!("Generating instance zip...");
+        let _ = sender.send((0.65, format!("Generating instance zip...")));
 
         if std::fs::exists(&output_file).unwrap_or_default() {
             std::fs::remove_file(&output_file)?;
@@ -115,7 +129,7 @@ pub async fn install(
         let file = std::fs::File::create_new(&output_file)?;
         Box::new(ZipWriter::new(file))
     } else {
-        info!("Generating output files...");
+        let _ = sender.send((0.65, format!("Generating output files...")));
 
         Box::new(output_file.clone())
     };
@@ -143,6 +157,7 @@ pub async fn install(
     )?;
 
     let pack_components = transformed_pack_json["components"].as_array_mut().unwrap();
+    let _ = sender.send((0.75, format!("Adding library components...")));
     for library in extra_libs {
         let colons = library
             .name
@@ -218,14 +233,16 @@ pub async fn install(
         any(unix, target_os = "windows"),
         not(any(target_os = "android", target_os = "emscripten"))
     ))]
-    if copy_profile_path {
-        let mut cp = Clipboard::new().map_err(|e| InstallerError(e.to_string()))?;
-        cp.set()
-            .text(output_file.to_string_lossy().into_owned())
-            .map_err(|_| InstallerError("Failed to copy profile path".to_owned()))?;
+    {
+        if copy_profile_path {
+            let mut cp = Clipboard::new().map_err(|e| InstallerError(e.to_string()))?;
+            cp.set()
+                .text(output_file.to_string_lossy().into_owned())
+                .map_err(|_| InstallerError("Failed to copy profile path".to_owned()))?;
+        }
     }
 
-    info!("Done!");
+    let _ = sender.send((1.0, format!("Done!")));
 
     Ok(())
 }

@@ -1,6 +1,5 @@
 package net.ornithemc.server_launcher;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -32,20 +31,20 @@ public class ServerLauncher {
 		arguments.removeAll(Arrays.asList(args));
 		var cp = new ArrayList<String>();
 		if (in != null) {
+			var self = ServerLauncher.class.getProtectionDomain().getCodeSource().getLocation().getPath();
 			try (in; var reader = new InputStreamReader(in)) {
 				var ornitheArgs = gson.fromJson(reader, OrnitheArgs.class);
 				if (arguments.contains("-jar")) {
 					int jarIndex = arguments.indexOf("-jar");
 					var jar = arguments.get(jarIndex + 1);
+					arguments.set(jarIndex, "-cp");
+					arguments.set(jarIndex + 1, self);
 					try (var fs = FileSystems.newFileSystem(Path.of(jar)); var mnIn = Files.newInputStream(fs.getPath("/META-INF/MANIFEST.MF"))) {
 						var mn = new Manifest(mnIn);
 						var attributes = mn.getMainAttributes();
 						if (attributes.containsKey(Attributes.Name.CLASS_PATH)) {
-							arguments.set(jarIndex, "-cp");
 							Collections.addAll(cp, attributes.getValue(Attributes.Name.CLASS_PATH).split(" "));
 							cp.remove(ornitheArgs.flapJar);
-							cp.add(ServerLauncher.class.getProtectionDomain().getCodeSource().getLocation().getPath());
-							arguments.set(jarIndex + 1, String.join(File.pathSeparator, cp));
 						}
 					} catch (IOException e) {
 						log.error("Failed to read launcher jar manifest:", e);

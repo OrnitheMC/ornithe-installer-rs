@@ -3,11 +3,12 @@ use std::{
     io::{Cursor, Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    thread,
+    time::Duration,
 };
 
-use log::info;
 use serde_json::json;
-use tokio::task::JoinSet;
+use tokio::{sync::mpsc::UnboundedSender, task::JoinSet};
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 const SERVER_LAUNCHER_JAR: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ServerLauncher.jar"));
@@ -22,6 +23,7 @@ use crate::{
 };
 
 pub async fn install(
+    sender: UnboundedSender<(f32, String)>,
     version: MinecraftVersion,
     intermediary: IntermediaryVersion,
     loader_type: LoaderType,
@@ -31,6 +33,7 @@ pub async fn install(
     install_server: bool,
 ) -> Result<(), InstallerError> {
     install_path(
+        sender.clone(),
         &version,
         &intermediary,
         &loader_type,
@@ -41,18 +44,22 @@ pub async fn install(
     )
     .await?;
 
-    info!(
-        "Installed Ornithe Server for Minecraft {} using {} Loader {} to {}",
-        &version.id,
-        &loader_type.get_localized_name(),
-        &loader_version.version,
-        &location.to_str().unwrap_or_default()
-    );
+    let _ = sender.send((
+        1.0,
+        format!(
+            "Installed Ornithe Server for Minecraft {} using {} Loader {} to {}",
+            &version.id,
+            &loader_type.get_localized_name(),
+            &loader_version.version,
+            &location.to_str().unwrap_or_default()
+        ),
+    ));
 
     Ok(())
 }
 
 async fn install_path(
+    sender: UnboundedSender<(f32, String)>,
     version: &MinecraftVersion,
     intermediary: &IntermediaryVersion,
     loader_type: &LoaderType,
@@ -66,13 +73,16 @@ async fn install_path(
     }
     let location = location.canonicalize()?;
 
-    info!(
-        "Installing server for {} using {} Loader {} to {}",
-        version.id,
-        loader_type.get_localized_name(),
-        loader_version.version,
-        location.to_str().unwrap_or("<not representable>")
-    );
+    let _ = sender.send((
+        0.1,
+        format!(
+            "Installing server for {} using {} Loader {} to {}",
+            version.id,
+            loader_type.get_localized_name(),
+            loader_version.version,
+            location.display()
+        ),
+    ));
 
     let clear_paths = [location.join(".fabric"), location.join(".quilt")];
     for path in clear_paths {
@@ -90,7 +100,7 @@ async fn install_path(
     )
     .await?;
 
-    info!("Installing libraries");
+    let _ = sender.send((0.2, format!("Installing libraries")));
 
     if !launch_json.is_object() {
         return Err(InstallerError(
@@ -134,6 +144,7 @@ async fn install_path(
 
     let mut fabric_loader_artifact = None;
     let library_dir = location.join("libraries");
+    let mut lib_count = libraries.len();
     for library in libraries {
         let name = library["name"]
             .as_str()
@@ -163,16 +174,28 @@ async fn install_path(
             maven::download_latest_release("flap", &out_path).await?;
             Ok(out_path)
         });
+        lib_count += 1;
     }
 
     let mut downloaded_library_files = Vec::new();
     while let Some(done) = library_files.join_next().await {
         match done {
             Ok(res) => match res {
-                Ok(file) => downloaded_library_files.push(file),
+                Ok(file) => {
+                    let name = file
+                        .file_name()
+                        .map(|o| o.to_string_lossy().to_string())
+                        .unwrap_or("??.jar".to_string());
+                    downloaded_library_files.push(file);
+                    let num = downloaded_library_files.len();
+                    let _ = sender.send((
+                        (num as f32 / lib_count as f32) / 2.0,
+                        format!("Downloaded {}, {}/{}", name, num, lib_count),
+                    ));
+                }
                 Err(e) => {
                     return Err(InstallerError(
-                        "Failed to download libraries: ".to_owned() + &e.0,
+                        "Failed to download library: ".to_owned() + &e.0,
                     ));
                 }
             },
@@ -184,7 +207,10 @@ async fn install_path(
         }
     }
 
-    info!("Downloaded {} libraries!", downloaded_library_files.len());
+    let _ = sender.send((
+        0.8,
+        format!("Downloaded {} libraries!", downloaded_library_files.len()),
+    ));
 
     if let Some(loader) = fabric_loader_artifact {
         let lib = location.join("libraries").join(split_artifact(&loader));
@@ -208,7 +234,7 @@ async fn install_path(
     .await?;
 
     if install_server {
-        info!("Downloading server jar");
+        let _ = sender.send((0.9, format!("Downloading server jar")));
         let url = version
             .get_jar_download_url(&crate::net::GameSide::Server)
             .await?;
@@ -348,6 +374,7 @@ fn split_artifact(artifact: &str) -> String {
 }
 
 pub async fn install_and_run<I, S>(
+    sender: UnboundedSender<(f32, String)>,
     version: MinecraftVersion,
     intermediary: IntermediaryVersion,
     loader_type: LoaderType,
@@ -363,6 +390,7 @@ where
 {
     let launch_jar = location.join(loader_type.get_name().to_owned() + "-server-launch.jar");
     let mut needs_install = false;
+    let _ = sender.send((0.0, format!("Checking for present server installation...")));
     if !launch_jar.exists() {
         needs_install = true;
     }
@@ -375,6 +403,7 @@ where
 
     if needs_install {
         install_path(
+            sender.clone(),
             &version,
             &intermediary,
             &loader_type,
@@ -385,6 +414,8 @@ where
         )
         .await?;
     }
+
+    let _ = sender.send((0.95, format!("Starting")));
 
     let mut java_binary = "java".to_owned();
     if let Some(arg) = java {
@@ -403,7 +434,11 @@ where
         cmd.args(args);
     }
     cmd.arg("-jar").arg(jar).arg("nogui");
-    cmd.status()?;
+    let mut child = cmd.spawn()?;
+    tokio::spawn(async move {
+        thread::sleep(Duration::from_millis(100));
+        child.wait().unwrap();
+    });
 
     Ok(needs_install)
 }

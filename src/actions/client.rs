@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use base64::{Engine, prelude::BASE64_STANDARD_NO_PAD};
 use chrono::Utc;
-use log::info;
 use serde_json::{Map, Value, json};
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
     errors::InstallerError,
@@ -15,6 +15,7 @@ use crate::{
 };
 
 pub async fn install(
+    sender: UnboundedSender<(f32, String)>,
     version: MinecraftVersion,
     intermediary: IntermediaryVersion,
     loader_type: LoaderType,
@@ -31,17 +32,23 @@ pub async fn install(
                 + "Make sure you selected the correct folder and that you have started the game at least once before.",
         ));
     }
-    info!(
-        "Installing Minecraft client at {}",
-        location.display().to_string()
-    );
+    let _ = sender.send((
+        0.2,
+        format!(
+            "Installing client for {} using {} Loader {} to {}",
+            version.id,
+            loader_type.get_localized_name(),
+            loader_version.version,
+            location.display()
+        ),
+    ));
 
     let calamus_gen = match generation {
         Some(g) => g,
         None => meta::fetch_intermediary_generations().await?.stable,
     };
 
-    info!("Fetching launch jsons..");
+    let _ = sender.send((0.4, format!("Fetching launch jsons..")));
     let (vanilla_profile_name, vanilla_launch_json) = manifest::fetch_launch_json(&version).await?;
 
     let (profile_name, mut ornithe_launch_json) = meta::fetch_launch_json(
@@ -53,7 +60,7 @@ pub async fn install(
     )
     .await?;
 
-    info!("Setting up destination..");
+    let _ = sender.send((0.6, format!("Setting up destination..")));
 
     let versions_dir = location.join("versions");
     let vanilla_profile_dir = versions_dir.join(&vanilla_profile_name);
@@ -91,7 +98,7 @@ pub async fn install(
         }
     }
 
-    info!("Creating files..");
+    let _ = sender.send((0.8, format!("Creating files..")));
 
     std::fs::create_dir_all(vanilla_profile_dir)?;
     std::fs::create_dir_all(profile_dir)?;
@@ -102,6 +109,8 @@ pub async fn install(
     if create_profile {
         update_profiles(location, profile_name, version, loader_type, calamus_gen)?;
     }
+
+    let _ = sender.send((1.0, format!("Done")));
 
     Ok(())
 }
