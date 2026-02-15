@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write, path::PathBuf};
+use std::{collections::HashMap, io::Write, path::PathBuf, time::Duration};
 
 use clap::{ArgMatches, Command, arg, command, value_parser};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -120,16 +120,8 @@ pub async fn run() {
 async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError> {
     if let Some(_) = matches.subcommand_matches("intermediary-generations") {
         let generations = crate::net::meta::fetch_intermediary_generations().await?;
-        writeln!(
-            std::io::stdout(),
-            "Latest Generation: {}",
-            generations.latest
-        )?;
-        writeln!(
-            std::io::stdout(),
-            "Stable Generation: {}",
-            generations.stable
-        )?;
+        println!("Latest Generation: {}", generations.latest);
+        println!("Stable Generation: {}", generations.stable);
         return Ok(InstallationResult::NotInstalled);
     }
     if let Some(matches) = matches.subcommand_matches("loader-versions") {
@@ -143,8 +135,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
                 out += &(version.version.clone() + " ");
             }
         }
-        writeln!(
-            std::io::stdout(),
+        println!(
             "Latest {} Loader version: {}",
             loader_type.get_localized_name(),
             versions
@@ -152,13 +143,12 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
                 .and_then(|list| list.get(0))
                 .map(|v| v.version.clone())
                 .unwrap_or("<not available>".to_owned())
-        )?;
-        writeln!(
-            std::io::stdout(),
+        );
+        println!(
             "Available {} Loader versions:",
             loader_type.get_localized_name()
-        )?;
-        writeln!(std::io::stdout(), "{}", out)?;
+        );
+        println!("{}", out);
 
         return Ok(InstallationResult::NotInstalled);
     }
@@ -184,8 +174,8 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
                 out += &(version.id.clone() + " ");
             }
         }
-        writeln!(std::io::stdout(), "Available Minecraft versions:\n")?;
-        writeln!(std::io::stdout(), "{}", out)?;
+        println!("Available Minecraft versions:\n");
+        println!("{}", out);
         return Ok(InstallationResult::NotInstalled);
     }
 
@@ -193,10 +183,11 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
 
     let fut = tokio::spawn(do_install(send, matches));
     let pb = ProgressBar::new(100).with_style(
-        ProgressStyle::with_template("{spinner:.green} [{wide_bar:.cyan/blue}]")
+        ProgressStyle::with_template("[{wide_bar:.green/cyan}] [{percent}%] ")
             .unwrap()
             .progress_chars("#>-"),
     );
+    pb.enable_steady_tick(Duration::from_millis(100));
     pb.set_position(0);
 
     while !fut.is_finished() || !recv.is_empty() {
