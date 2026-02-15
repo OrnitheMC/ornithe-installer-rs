@@ -171,7 +171,7 @@ impl App {
         let mut intermediary_versions = HashMap::new();
         let manifest_future = net::manifest::fetch_versions(&None);
         let intermediary_future = net::meta::fetch_intermediary_versions(&None);
-        let loader_future = net::meta::fetch_loader_versions();
+        let loader_future = net::meta::fetch_loader_versions(&None);
 
         info!("Loading versions...");
         if let Ok(versions) = manifest_future.await {

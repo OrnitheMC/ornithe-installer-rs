@@ -114,7 +114,7 @@ pub async fn install(
         ..
     } = maven::get_latest_version("flap").await?;
 
-    let extra_libs = meta::fetch_profile_libraries(&version.id).await?;
+    let extra_libs = meta::fetch_profile_libraries(&generation, &version.id).await?;
     let _ = sender.send((
         0.6,
         format!("Found {} library upgrade patches", extra_libs.len()),

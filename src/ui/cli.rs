@@ -81,7 +81,7 @@ pub async fn run() {
                 .arg(arg!(--"show-historical" "Include historical versions")),
         )
         .subcommand(
-            Command::new("loader-versions")
+            add_gen_argument(Command::new("loader-versions")
             .long_flag("list-loader-versions")
             .long_about("List available loader versions.")
                 .about("List available loader versions. Arguments: [--show-betas, --loader-type]")
@@ -89,7 +89,7 @@ pub async fn run() {
                 .arg(arg!(--"loader-type" <TYPE> "Loader type to use")
                 .default_value("fabric")
                 .ignore_case(true)
-                .value_parser(["fabric", "quilt"])),
+                .value_parser(["fabric", "quilt"]))),
         )
         .subcommand(Command::new("intermediary-generations")
         .long_flag("intermediary-generations")
@@ -125,7 +125,8 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         return Ok(InstallationResult::NotInstalled);
     }
     if let Some(matches) = matches.subcommand_matches("loader-versions") {
-        let versions = crate::net::meta::fetch_loader_versions().await?;
+        let generation = matches.get_one::<u32>("gen").map(|u| *u);
+        let versions = crate::net::meta::fetch_loader_versions(&generation).await?;
         let loader_type = get_loader_type(matches)?;
         let betas = matches.get_flag("show-betas");
 
@@ -207,12 +208,13 @@ async fn do_install(
     send: UnboundedSender<(f32, String)>,
     matches: ArgMatches,
 ) -> Result<InstallationResult, InstallerError> {
-    let loader_versions = crate::net::meta::fetch_loader_versions().await?;
     if let Some(matches) = matches.subcommand_matches("client") {
         let (minecraft_version, intermediary, info) =
             get_minecraft_version(matches, GameSide::Client).await?;
         let loader_type = get_loader_type(matches)?;
-        let loader_versions = loader_versions.get(&loader_type).unwrap();
+        let all_loader_versions =
+            crate::net::meta::fetch_loader_versions(&info.calamus_generation).await?;
+        let loader_versions = all_loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let location = matches.get_one::<PathBuf>("dir").unwrap().clone();
         let create_profile = matches.get_flag("generate-profile");
@@ -233,8 +235,11 @@ async fn do_install(
     if let Some(matches) = matches.subcommand_matches("server") {
         let (minecraft_version, intermediary, info) =
             get_minecraft_version(matches, GameSide::Server).await?;
+
         let loader_type = get_loader_type(matches)?;
-        let loader_versions = loader_versions.get(&loader_type).unwrap();
+        let all_loader_versions =
+            crate::net::meta::fetch_loader_versions(&info.calamus_generation).await?;
+        let loader_versions = all_loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let location = matches.get_one::<PathBuf>("dir").unwrap().clone();
         if let Some(matches) = matches.subcommand_matches("run") {
@@ -275,7 +280,9 @@ async fn do_install(
         let (minecraft_version, intermediary, info) =
             get_minecraft_version(matches, GameSide::Server).await?;
         let loader_type = get_loader_type(matches)?;
-        let loader_versions = loader_versions.get(&loader_type).unwrap();
+        let all_loader_versions =
+            crate::net::meta::fetch_loader_versions(&info.calamus_generation).await?;
+        let loader_versions = all_loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let output_dir = matches.get_one::<PathBuf>("dir").unwrap().clone();
         let copy_profile_path = matches
