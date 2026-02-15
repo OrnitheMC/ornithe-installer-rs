@@ -189,7 +189,7 @@ async fn install_path(
                     downloaded_library_files.push(file);
                     let num = downloaded_library_files.len();
                     let _ = sender.send((
-                        (num as f32 / lib_count as f32) / 2.0,
+                        (num as f32 / lib_count as f32) / 2.0 + 0.2,
                         format!("Downloaded {}, {}/{}", name, num, lib_count),
                     ));
                 }
@@ -415,7 +415,7 @@ where
         .await?;
     }
 
-    let _ = sender.send((0.95, format!("Starting")));
+    let _ = sender.send((0.95, format!("Starting server...")));
 
     let mut java_binary = "java".to_owned();
     if let Some(arg) = java {

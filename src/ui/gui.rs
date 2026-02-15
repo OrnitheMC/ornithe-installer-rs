@@ -666,13 +666,18 @@ impl eframe::App for App {
                                     .show(ui);
                             });
                         ui.add_space(4.0);
-                        ui.visuals_mut().override_text_color = Some(Color32::BLUE);
                         ProgressBar::new(progress.last_progress)
                             .desired_width(ui.available_width())
                             .animate(true)
+                            .text(
+                                RichText::new(format!(
+                                    "{}%",
+                                    (progress.last_progress * 100.0) as i32
+                                ))
+                                .background_color(Color32::LIGHT_BLUE),
+                            )
                             .fill(Color32::LIGHT_BLUE)
                             .ui(ui);
-                        ui.add_space(0.5);
                     });
                     ui.vertical_centered(|ui| {
                         let mut back = Button::new(RichText::new("Back").heading());

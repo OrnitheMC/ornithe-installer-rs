@@ -199,7 +199,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
     );
     pb.set_position(0);
 
-    while !fut.is_finished() && !recv.is_empty() {
+    while !fut.is_finished() || !recv.is_empty() {
         match recv.try_recv() {
             Ok((prog, msg)) => {
                 pb.println(msg);

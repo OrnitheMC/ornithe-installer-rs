@@ -9,8 +9,8 @@ group = "net.ornithemc"
 val env: Map<String, String> = System.getenv()
 
 val versionRegex: Pattern = Pattern.compile("version = \"(.*)\"")
-version = file("Cargo.toml").useLines {
-    it.map { versionRegex.matcher(it) }.first {
+version = file("Cargo.toml").useLines { lines ->
+    lines.map { versionRegex.matcher(it) }.first {
         it.matches()
     }.group(1)
 }

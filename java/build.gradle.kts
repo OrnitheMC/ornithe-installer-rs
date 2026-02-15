@@ -1,6 +1,5 @@
 plugins {
     java
-    id("com.gradleup.shadow") version "9.3.+"
     id("xyz.wagyourtail.jvmdowngrader") version "1.3.4"
 }
 
@@ -20,11 +19,12 @@ base {
 
 repositories {
     mavenCentral()
+    maven("https://maven.ornithemc.net/releases")
 }
 
 dependencies {
-    compileOnly("com.google.code.gson:gson:2.10")
-    compileOnly("org.slf4j:slf4j-api:2.0.1")
+    compileOnly("net.ornithemc:flap:0.0.1")
+    compileOnly("org.apache.logging.log4j:log4j-core:2.19.0")
 }
 
 jvmdg {
@@ -39,15 +39,9 @@ tasks.jar {
     }
 }
 
-tasks.shadowJar {
-    exclude("META-INF/MANIFEST.MF")
-    relocate("com.google.gson", "net.ornithemc.flap.lib.gson") // use flap's shadowed gson because we know it supports record deserialization
-}
-
 tasks.downgradeJar {
     dependsOn(tasks.jar)
-    dependsOn(tasks.shadowJar)
-    inputFile.set(tasks.shadowJar.get().archiveFile)
+    inputFile.set(tasks.jar.get().archiveFile)
 }
 
 tasks.shadeDowngradedApi {
