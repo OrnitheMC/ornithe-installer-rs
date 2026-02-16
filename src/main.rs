@@ -11,9 +11,14 @@ static USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_V
 static ORNITHE_ICON_BYTES: &[u8] = include_bytes!("../res/icon.png");
 const OSL_MODRINTH_URL: &str = "https://modrinth.com/mod/osl";
 
+#[macro_use]
+extern crate rust_i18n;
+i18n!("locales", fallback = "en", minify_key = true);
+
 #[tokio::main]
 async fn main() {
     env_logger::init_from_env(Env::default().default_filter_or("ornithe_installer_rs=info"));
+    rust_i18n::set_locale("en");
 
     info!("Ornithe Installer v{}", VERSION);
 

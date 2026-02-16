@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::errors::InstallerError;
+use crate::{errors::InstallerError, net::manifest};
 
 use super::GameSide;
 
@@ -100,13 +100,18 @@ pub async fn fetch_launch_json(
         .await?;
     let version_id = text["id"]
         .as_str()
-        .ok_or(InstallerError(
-            "Launch Json does not contain 'id' key!".to_string(),
-        ))?
+        .ok_or(InstallerError::from(t!("meta.error.launch_json_no_id")))?
         .to_owned();
 
+    text["inheritsFrom"] =
+        Value::String(manifest::vanilla_profile_name(&intermediary.version, generation).await?);
+
+    let library_upgrades_route = match generation {
+        Some(g) => format!("/v3/versions/gen{}/libraries/{}", g, &intermediary.version),
+        None => format!("/v3/versions/libraries/{}", &intermediary.version),
+    };
     let library_upgrades = super::CLIENT
-        .get(META_URL.to_owned() + &format!("/v3/versions/libraries/{}", &intermediary.version))
+        .get(META_URL.to_owned() + &library_upgrades_route)
         .send()
         .await?
         .json::<Vec<ProfileJsonLibrary>>()
@@ -153,27 +158,30 @@ pub async fn fetch_launch_json(
     Ok((version_id, text))
 }
 
-pub async fn fetch_loader_versions()
--> Result<HashMap<LoaderType, Vec<LoaderVersion>>, InstallerError> {
+pub async fn fetch_loader_versions(
+    generation: &Option<u32>,
+) -> Result<HashMap<LoaderType, Vec<LoaderVersion>>, InstallerError> {
     let mut out = HashMap::new();
     for loader in [LoaderType::Fabric, LoaderType::Quilt] {
-        let versions = fetch_loader_versions_type(&loader).await?;
+        let versions = fetch_loader_versions_type(generation, &loader).await?;
         out.insert(loader, versions);
     }
     Ok(out)
 }
 
 async fn fetch_loader_versions_type(
+    generation: &Option<u32>,
     loader_type: &LoaderType,
 ) -> Result<Vec<LoaderVersion>, InstallerError> {
-    let url = META_URL.to_owned()
-        + "/v3/versions/"
-        + match loader_type {
-            LoaderType::Fabric => "fabric-loader",
-            LoaderType::Quilt => "quilt-loader",
-        };
+    let url = match generation {
+        Some(g) => format!("/v3/versions/gen{}/", g),
+        None => "/v3/versions/".to_owned(),
+    } + match loader_type {
+        LoaderType::Fabric => "fabric-loader",
+        LoaderType::Quilt => "quilt-loader",
+    };
     super::CLIENT
-        .get(url)
+        .get(META_URL.to_owned() + &url)
         .send()
         .await?
         .json::<Vec<LoaderVersion>>()
@@ -224,10 +232,15 @@ pub struct ProfileJsonLibrary {
 }
 
 pub async fn fetch_profile_libraries(
+    generation: &Option<u32>,
     version: &str,
 ) -> Result<Vec<ProfileJsonLibrary>, InstallerError> {
+    let url = match generation {
+        Some(g) => format!("/v3/versions/gen{}/libraries/{}", g, version),
+        None => format!("/v3/versions/libraries/{}", version),
+    };
     let library_upgrades = super::CLIENT
-        .get(META_URL.to_owned() + &format!("/v3/versions/libraries/{}", version))
+        .get(META_URL.to_owned() + &url)
         .send()
         .await?
         .json::<Vec<ProfileJsonLibrary>>()

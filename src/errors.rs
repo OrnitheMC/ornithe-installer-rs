@@ -1,4 +1,4 @@
-use std::{fmt::Debug, path::StripPrefixError};
+use std::{borrow::Cow, fmt::Debug, path::StripPrefixError};
 
 #[derive(Debug)]
 pub struct InstallerError(pub String);
@@ -37,5 +37,11 @@ impl From<zip::result::ZipError> for InstallerError {
 impl From<StripPrefixError> for InstallerError {
     fn from(value: StripPrefixError) -> Self {
         InstallerError(format!("{}", value))
+    }
+}
+
+impl From<Cow<'_, str>> for InstallerError {
+    fn from(value: Cow<'_, str>) -> Self {
+        InstallerError(value.to_string())
     }
 }

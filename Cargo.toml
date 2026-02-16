@@ -14,9 +14,11 @@ clap = { version = "4.5.35", features = ["cargo", "derive", "string"] }
 eframe = { version = "0.33.2", features = ["wgpu"], optional = true }
 egui = { version = "0.33.2", optional = true }
 env_logger = "0.11.8"
+indicatif = { version = "0.18.3", features = ["improved_unicode"] }
 log = "0.4.27"
 reqwest = { version = "0.13.1", features = ["json", "native-tls", "http2", "charset", "system-proxy"], default-features = false }
 rfd = { version = "0.17.2", optional = true }
+rust-i18n = { version = "3.1.5" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.145", features = ["preserve_order"] }
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }

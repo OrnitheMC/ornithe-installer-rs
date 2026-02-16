@@ -1,8 +1,8 @@
 use std::{fs::File, io::Write, path::PathBuf};
 
 use arboard::Clipboard;
-use log::info;
 use serde_json::{Value, json};
+use tokio::sync::mpsc::UnboundedSender;
 use zip::{ZipWriter, write::SimpleFileOptions};
 
 use crate::{
@@ -10,6 +10,7 @@ use crate::{
     net::{
         GameSide,
         manifest::{self, MinecraftVersion},
+        maven::{self, MavenVersion},
         meta::{self, IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
@@ -20,6 +21,7 @@ const INSTANCE_CONFIG: &str = include_str!("../../res/packformat/instance.cfg");
 const MMC_PACK: &str = include_str!("../../res/packformat/mmc-pack.json");
 
 pub async fn install(
+    sender: UnboundedSender<(f32, String)>,
     version: MinecraftVersion,
     intermediary_version: IntermediaryVersion,
     loader_type: LoaderType,
@@ -29,19 +31,30 @@ pub async fn install(
     generate_zip: bool,
     generation: Option<u32>,
 ) -> Result<(), InstallerError> {
+    let _ = sender.send((
+        0.1,
+        t!(
+            "mmc.info.starting_installation",
+            version = version.id,
+            loader = loader_type.get_localized_name(),
+            loader_version = loader_version.version,
+            destination = output_dir.display()
+        )
+        .into(),
+    ));
     if !output_dir.exists() {
         std::fs::create_dir_all(&output_dir)?;
     }
     let output_dir = output_dir.canonicalize()?;
 
-    info!("Fetching version information...");
+    let _ = sender.send((0.2, t!("mmc.info.fetching_version_information").into()));
     let intermediary_maven = intermediary_version
         .maven
         .clone()
         .strip_suffix(&(":".to_owned() + &intermediary_version.version))
-        .ok_or(InstallerError(
-            "Failed to retrieve intermediary maven coordinates".to_owned(),
-        ))?
+        .ok_or(InstallerError::from(t!(
+            "mmc.error.failed_to_retrieve_intermediary_coordinates"
+        )))?
         .to_owned();
 
     let (lwjgl_url, lwjgl_version) = manifest::find_lwjgl_url_version(&version).await?;
@@ -51,7 +64,7 @@ pub async fn install(
         None => meta::fetch_intermediary_generations().await?.stable,
     };
 
-    info!("Transforming templates...");
+    let _ = sender.send((0.4, t!("mmc.info.transforming_templates").into()));
 
     let mut transformed_pack_json = serde_json::from_str::<Value>(
         &transform_pack_json(
@@ -77,7 +90,7 @@ pub async fn install(
     )
     .await?;
     let minecraft_patch_json =
-        get_mmc_launch_json(&version, &lwjgl_version, &ornithe_launch_json).await?;
+        get_mmc_launch_json(&version, &generation, &lwjgl_version, &ornithe_launch_json).await?;
 
     let profile_name = format!(
         "Ornithe Gen{calamus_gen} {} {}",
@@ -89,19 +102,33 @@ pub async fn install(
     } else {
         let dir = output_dir.join(profile_name.clone());
         if std::fs::exists(&dir).unwrap_or_default() {
-            return Err(InstallerError("Instance already exists".to_string()));
+            return Err(InstallerError::from(t!(
+                "mmc.error.instance_already_exists"
+            )));
         }
         std::fs::create_dir_all(&dir)?;
         dir
     };
 
-    info!("Fetching library information...");
+    let _ = sender.send((0.5, t!("mmc.info.fetching_library_information").into()));
 
-    let extra_libs = meta::fetch_profile_libraries(&version.id).await?;
-    info!("Found {} library upgrade patches", extra_libs.len());
+    let MavenVersion {
+        version: flap_version,
+        ..
+    } = maven::get_latest_version("flap").await?;
+
+    let extra_libs = meta::fetch_profile_libraries(&generation, &version.id).await?;
+    let _ = sender.send((
+        0.6,
+        t!(
+            "mmc.info.found_library_upgrades",
+            num_libraries = extra_libs.len()
+        )
+        .into(),
+    ));
 
     let mut zip: Box<dyn Writer> = if generate_zip {
-        info!("Generating instance zip...");
+        let _ = sender.send((0.65, t!("mmc.info.generating_instance_zip").into()));
 
         if std::fs::exists(&output_file).unwrap_or_default() {
             std::fs::remove_file(&output_file)?;
@@ -109,7 +136,7 @@ pub async fn install(
         let file = std::fs::File::create_new(&output_file)?;
         Box::new(ZipWriter::new(file))
     } else {
-        info!("Generating output files...");
+        let _ = sender.send((0.65, t!("mmc.info.generating_output_files").into()));
 
         Box::new(output_file.clone())
     };
@@ -137,6 +164,7 @@ pub async fn install(
     )?;
 
     let pack_components = transformed_pack_json["components"].as_array_mut().unwrap();
+    let _ = sender.send((0.75, t!("mmc.info.adding_library_components").into()));
     for library in extra_libs {
         let colons = library
             .name
@@ -149,7 +177,7 @@ pub async fn install(
             .name
             .get((colons.clone().next().unwrap() + 1)..colons.clone().last().unwrap())
             .unwrap();
-        let version = library.name.get(0..(colons.last().unwrap() + 1)).unwrap();
+        let version = library.name.get((colons.last().unwrap() + 1)..).unwrap();
         zip.write_file(&("patches/".to_owned() + &uid + ".json"), 
             format!(r#"{{"formatVersion": 1, "libraries": [{{"name": "{}","url": "{}"}}], "name": "{}", "type": "release", "uid": "{}", "version": "{}"}}"#,
              library.name, library.url, lib_name, uid, version).as_bytes())?;
@@ -183,6 +211,27 @@ pub async fn install(
     }
 
     zip.write_file(
+        "patches/net.ornithemc.flap.json",
+        serde_json::to_string(&json!({
+            "formatVersion": 1,
+            "name": "Flap",
+            "type": "release",
+            "uid": "net.ornithemc.flap",
+            "version": flap_version,
+            "+agents": [{
+                "name": format!("net.ornithemc:flap:{}", flap_version),
+                "url": maven::MAVEN_URL
+            }]
+        }))?
+        .as_bytes(),
+    )?;
+    pack_components.push(json!({
+        "cachedName": "Flap",
+        "cachedVersion": flap_version,
+        "uid": "net.ornithemc.flap"
+    }));
+
+    zip.write_file(
         "mmc-pack.json",
         &serde_json::to_vec_pretty(&transformed_pack_json)?,
     )?;
@@ -191,14 +240,15 @@ pub async fn install(
         any(unix, target_os = "windows"),
         not(any(target_os = "android", target_os = "emscripten"))
     ))]
-    if copy_profile_path {
-        let mut cp = Clipboard::new().map_err(|e| InstallerError(e.to_string()))?;
-        cp.set()
-            .text(output_file.to_string_lossy().into_owned())
-            .map_err(|_| InstallerError("Failed to copy profile path".to_owned()))?;
+    {
+        if copy_profile_path {
+            Clipboard::new()
+                .and_then(|mut cp| cp.set().text(output_file.to_string_lossy().into_owned()))
+                .map_err(|_| InstallerError::from(t!("mmc.error.failed_to_copy_path")))?;
+        }
     }
 
-    info!("Done!");
+    let _ = sender.send((1.0, t!("mmc.info.done").into()));
 
     Ok(())
 }
@@ -245,11 +295,12 @@ async fn transform_pack_json(
 
 async fn get_mmc_launch_json(
     version: &MinecraftVersion,
+    generation: &Option<u32>,
     lwjgl_version: &String,
     ornithe_launch_json: &Value,
 ) -> Result<String, InstallerError> {
     let client_name = format!("com.mojang:minecraft:{}:client", version.id);
-    let (_, vanilla_launch_json) = manifest::fetch_launch_json(version).await?;
+    let (_, vanilla_launch_json) = manifest::fetch_launch_json(version, &generation).await?;
     let vanilla_json = serde_json::from_str::<Value>(&vanilla_launch_json)?;
 
     let client = vanilla_json["downloads"]["client"].as_object().unwrap();

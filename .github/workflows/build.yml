@@ -11,13 +11,37 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  build_serverlauncher:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "microsoft"
+          java-version: 21
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5.0.0
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - name: Build
+        env:
+          OUT_DIR: ".."
+        run: ./gradlew :java:assemble --stacktrace
+      - name: Store built jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: serverlauncher
+          path: ServerLauncher.jar
+          retention-days: 1
   build:
+    needs: build_serverlauncher
     strategy:
       matrix:
         build: [linux-x86_64, windows-x86, windows-x86_64, windows-aarch64]
         include:
           - build: linux-x86_64
-            os: ubuntu-22.04
+            os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
           - build: windows-x86
             os: windows-latest
@@ -32,9 +56,12 @@ jobs:
             target: aarch64-pc-windows-msvc
             msvc_arch: amd64_arm64
     runs-on: ${{ matrix.os }}
-
     steps:
       - uses: actions/checkout@v4
+      - name: Download jar artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: serverlauncher
       - name: Install C toolchain (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
@@ -65,11 +92,17 @@ jobs:
             target/**/ornithe-installer-rs*
             !target/**/ornithe-installer-rs.d
             !target/**/build/
+
   build_macos:
+    needs: build_serverlauncher
     runs-on: ubuntu-latest
     container: ghcr.io/rust-cross/cargo-zigbuild:0.20
     steps:
       - uses: actions/checkout@v4
+      - name: Download jar artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: serverlauncher
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -89,7 +122,9 @@ jobs:
             target/**/ornithe-installer-rs*
             !target/**/ornithe-installer-rs.d
             !target/**/build/
+
   build_linux_cross:
+    needs: build_serverlauncher
     strategy:
       matrix:
         build: [linux-aarch64]
@@ -99,6 +134,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Download jar artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: serverlauncher
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:

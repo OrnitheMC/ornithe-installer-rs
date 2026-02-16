@@ -1,23 +1,29 @@
 use std::{
     ffi::OsStr,
-    io::Write,
-    path::PathBuf,
+    io::{Cursor, Read, Write},
+    path::{Path, PathBuf},
     process::{Command, Stdio},
+    thread,
+    time::Duration,
 };
 
-use log::info;
-use tokio::task::JoinSet;
+use serde_json::json;
+use tokio::{sync::mpsc::UnboundedSender, task::JoinSet};
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
+
+const SERVER_LAUNCHER_JAR: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ServerLauncher.jar"));
 
 use crate::{
     errors::InstallerError,
     net::{
         manifest::MinecraftVersion,
+        maven,
         meta::{IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
 
 pub async fn install(
+    sender: UnboundedSender<(f32, String)>,
     version: MinecraftVersion,
     intermediary: IntermediaryVersion,
     loader_type: LoaderType,
@@ -27,6 +33,7 @@ pub async fn install(
     install_server: bool,
 ) -> Result<(), InstallerError> {
     install_path(
+        sender.clone(),
         &version,
         &intermediary,
         &loader_type,
@@ -37,18 +44,23 @@ pub async fn install(
     )
     .await?;
 
-    info!(
-        "Installed Ornithe Server for Minecraft {} using {} Loader {} to {}",
-        &version.id,
-        &loader_type.get_localized_name(),
-        &loader_version.version,
-        &location.to_str().unwrap_or_default()
-    );
+    let _ = sender.send((
+        1.0,
+        t!(
+            "server.info.installed",
+            version = version.id,
+            loader = loader_type.get_localized_name(),
+            loader_version = loader_version.version,
+            destination = location.display()
+        )
+        .into(),
+    ));
 
     Ok(())
 }
 
 async fn install_path(
+    sender: UnboundedSender<(f32, String)>,
     version: &MinecraftVersion,
     intermediary: &IntermediaryVersion,
     loader_type: &LoaderType,
@@ -62,13 +74,17 @@ async fn install_path(
     }
     let location = location.canonicalize()?;
 
-    info!(
-        "Installing server for {} using {} Loader {} to {}",
-        version.id,
-        loader_type.get_localized_name(),
-        loader_version.version,
-        location.to_str().unwrap_or("<not representable>")
-    );
+    let _ = sender.send((
+        0.1,
+        t!(
+            "server.info.starting_installation",
+            version = version.id,
+            loader = loader_type.get_localized_name(),
+            loader_version = loader_version.version,
+            destination = location.display()
+        )
+        .into(),
+    ));
 
     let clear_paths = [location.join(".fabric"), location.join(".quilt")];
     for path in clear_paths {
@@ -86,13 +102,12 @@ async fn install_path(
     )
     .await?;
 
-    info!("Installing libraries");
+    let _ = sender.send((0.2, t!("server.info.installing_libraries").into()));
 
     if !launch_json.is_object() {
-        return Err(InstallerError(
-            "Cannot create server installation due to server endpoint returning wrong type."
-                .to_owned(),
-        ));
+        return Err(InstallerError::from(t!(
+            "server.error.wrong_type_from_endpoint"
+        )));
     }
 
     let mut main_class = "";
@@ -102,61 +117,117 @@ async fn install_path(
         LoaderType::Fabric => {
             main_class = &launch_json["mainClass"]
                 .as_str()
-                .ok_or(InstallerError("Could not find main class entry".to_owned()))?;
+                .ok_or(InstallerError::from(t!(
+                    "server.error.could_not_find_main_class_entry"
+                )))?;
             launch_main_class = "net.fabricmc.loader.launch.server.FabricServerLauncher".to_owned();
         }
         LoaderType::Quilt => {
             launch_main_class = launch_json["launcherMainClass"]
                 .as_str()
-                .ok_or(InstallerError("Could not find main class entry".to_owned()))?
+                .ok_or(InstallerError::from(t!(
+                    "server.error.could_not_find_main_class_entry"
+                )))?
                 .to_owned();
         }
     }
 
+    let jvm_args = launch_json["arguments"]["jvm"]
+        .as_array()
+        .unwrap_or(&Vec::new())
+        .iter()
+        .map(|v| v.as_str())
+        .filter(|opt| opt.is_some())
+        .map(|opt| opt.unwrap().to_string())
+        .collect::<Vec<_>>();
+
     let libraries = launch_json["libraries"]
         .as_array()
-        .ok_or(InstallerError("No libraries were specified".to_owned()))?;
+        .ok_or(InstallerError::from(t!("server.error.no_libraries")))?;
 
     let mut library_files = JoinSet::new();
 
     let mut fabric_loader_artifact = None;
+    let library_dir = location.join("libraries");
+    let mut lib_count = libraries.len();
     for library in libraries {
         let name = library["name"]
             .as_str()
-            .ok_or(InstallerError("Library had no name!".to_owned()))?
+            .ok_or(InstallerError::from(t!("server.error.no_library_name")))?
             .to_owned();
         let url = library["url"]
             .as_str()
-            .ok_or(InstallerError("Library had no url!".to_owned()))?
+            .ok_or(InstallerError::from(t!("server.error.no_library_url")))?
             .to_owned();
 
         if name.matches("net\\.fabricmc:fabric-loader:.*").count() > 0 {
             fabric_loader_artifact = Some(name.clone());
         }
-        let dir = location.join("libraries");
+
+        let dir = library_dir.clone();
         library_files.spawn(async move { download_library(&dir, name, url).await });
+    }
+
+    let flap_version = maven::get_latest_version("flap").await?;
+    let flap_path = library_dir.join(format!(
+        "net/ornithemc/flap/flap-{}.jar",
+        flap_version.version
+    ));
+    {
+        let out_path = flap_path.clone();
+        library_files.spawn(async move {
+            maven::download_latest_release("flap", &out_path).await?;
+            Ok(out_path)
+        });
+        lib_count += 1;
     }
 
     let mut downloaded_library_files = Vec::new();
     while let Some(done) = library_files.join_next().await {
         match done {
             Ok(res) => match res {
-                Ok(file) => downloaded_library_files.push(file),
-                Err(e) => {
-                    return Err(InstallerError(
-                        "Failed to download libraries: ".to_owned() + &e.0,
+                Ok(file) => {
+                    let name = file
+                        .file_name()
+                        .map(|o| o.to_string_lossy().to_string())
+                        .unwrap_or("??.jar".to_string());
+                    downloaded_library_files.push(file);
+                    let num = downloaded_library_files.len();
+                    let _ = sender.send((
+                        (num as f32 / lib_count as f32) / 2.0 + 0.2,
+                        t!(
+                            "server.info.downloaded_library",
+                            name = name,
+                            num = num,
+                            lib_count = lib_count
+                        )
+                        .into(),
                     ));
+                }
+                Err(e) => {
+                    return Err(InstallerError::from(t!(
+                        "server.error.library_failed",
+                        error = e.0
+                    )));
                 }
             },
             Err(e) => {
-                return Err(InstallerError(
-                    "Failed to download libraries: ".to_owned() + &e.to_string(),
-                ));
+                return Err(InstallerError::from(t!(
+                    "server.error.libraries_failed",
+                    error = e.to_string()
+                )));
             }
         }
     }
 
-    info!("Downloaded {} libraries!", downloaded_library_files.len());
+    let _ = sender.send((
+        0.8,
+        t!(
+            "server.info.downloaded_libraries",
+            lib_count = downloaded_library_files.len()
+        )
+        .into(),
+    ));
 
     if let Some(loader) = fabric_loader_artifact {
         let lib = location.join("libraries").join(split_artifact(&loader));
@@ -174,11 +245,13 @@ async fn install_path(
         main_class,
         &launch_main_class,
         &downloaded_library_files,
+        jvm_args,
+        flap_path.strip_prefix(&location.canonicalize()?)?,
     )
     .await?;
 
     if install_server {
-        info!("Downloading server jar");
+        let _ = sender.send((0.9, t!("server.info.downloading_server_jar").into()));
         let url = version
             .get_jar_download_url(&crate::net::GameSide::Server)
             .await?;
@@ -195,6 +268,8 @@ async fn create_launch_jar(
     main_class: &str,
     launch_main_class: &str,
     library_files: &Vec<PathBuf>,
+    jvm_args: Vec<String>,
+    flap_jar_path: &Path,
 ) -> Result<(), InstallerError> {
     let jar_out = install_location.join(loader_type.get_name().to_owned() + "-server-launch.jar");
     if jar_out.exists() {
@@ -203,16 +278,22 @@ async fn create_launch_jar(
 
     let file = std::fs::File::create(jar_out)?;
     let mut zip = ZipWriter::new(file);
+    let mut launch_jar = ZipArchive::new(Cursor::new(SERVER_LAUNCHER_JAR))?;
+    let mut manifest = Vec::new();
+    for i in 0..launch_jar.len() {
+        let f = launch_jar.by_index_raw(i)?;
+        match f.enclosed_name() {
+            Some(p) if p == Path::new("META-INF/MANIFEST.MF") => (),
+            _ => zip.raw_copy_file(f)?,
+        }
+    }
 
+    let mut jar_manifest = launch_jar.by_path("META-INF/MANIFEST.MF")?;
+    let mut mf = String::new();
+    jar_manifest.read_to_string(&mut mf)?;
+    write!(manifest, "{}", mf.replace("\n\r\n", "\n"))?;
     zip.start_file("META-INF/MANIFEST.MF", SimpleFileOptions::default())?;
 
-    let mut manifest = Vec::new();
-    writeln!(manifest, "Manifest-Version: 1.0\r")?;
-    writeln!(
-        manifest,
-        "{}\r",
-        wrap_manifest_line(&format!("Main-Class: {}", launch_main_class))
-    )?;
     let mut class_path = String::from("Class-Path: ");
     for library in library_files {
         let relative = library.strip_prefix(install_location)?.to_str();
@@ -228,7 +309,13 @@ async fn create_launch_jar(
         wrap_manifest_line(&format!("Minecraft-Version: {}\r", version.id))
     )?;
     zip.write_all(&manifest)?;
-    zip.add_directory("META-INF", SimpleFileOptions::default())?;
+
+    zip.start_file("ornithe-args.json", SimpleFileOptions::default())?;
+    zip.write_all(&serde_json::to_vec(&json!({
+        "flap_jar": flap_jar_path,
+        "main_class": launch_main_class,
+        "jvm_args": jvm_args
+    }))?)?;
 
     if loader_type == &LoaderType::Fabric {
         zip.start_file(
@@ -272,13 +359,14 @@ fn read_jar_manifest_attribute(
     if let Some(line) = main_class_line {
         let class = line.strip_prefix(attribute);
         if let Some(name) = class {
-            return Ok(name.to_owned());
+            return Ok(name.trim_ascii().to_owned());
         }
     }
 
-    Err(InstallerError(
-        "Couldn't find '".to_owned() + attribute + "' attribute in jar manifest!",
-    ))
+    Err(InstallerError::from(t!(
+        "server.error.failed_to_find_manifest_attribute",
+        attribute = attribute
+    )))
 }
 
 async fn download_library(
@@ -304,6 +392,7 @@ fn split_artifact(artifact: &str) -> String {
 }
 
 pub async fn install_and_run<I, S>(
+    sender: UnboundedSender<(f32, String)>,
     version: MinecraftVersion,
     intermediary: IntermediaryVersion,
     loader_type: LoaderType,
@@ -312,25 +401,27 @@ pub async fn install_and_run<I, S>(
     location: PathBuf,
     java: Option<&PathBuf>,
     args: Option<I>,
-) -> Result<(), InstallerError>
+) -> Result<bool, InstallerError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
     let launch_jar = location.join(loader_type.get_name().to_owned() + "-server-launch.jar");
     let mut needs_install = false;
+    let _ = sender.send((0.0, format!("Checking for present server installation...")));
     if !launch_jar.exists() {
         needs_install = true;
     }
 
     if !needs_install {
         needs_install = read_jar_manifest_attribute(&launch_jar, "Minecraft-Version")
-            .map(|v| v != version.id)
+            .map(|v| v.trim_ascii() != version.id)
             .unwrap_or(true);
     }
 
     if needs_install {
         install_path(
+            sender.clone(),
             &version,
             &intermediary,
             &loader_type,
@@ -341,6 +432,8 @@ where
         )
         .await?;
     }
+
+    let _ = sender.send((0.95, t!("server.info.launching").into()));
 
     let mut java_binary = "java".to_owned();
     if let Some(arg) = java {
@@ -359,7 +452,11 @@ where
         cmd.args(args);
     }
     cmd.arg("-jar").arg(jar).arg("nogui");
-    cmd.status()?;
+    let mut child = cmd.spawn()?;
+    tokio::spawn(async move {
+        thread::sleep(Duration::from_millis(100));
+        child.wait().unwrap();
+    });
 
-    Ok(())
+    Ok(needs_install)
 }

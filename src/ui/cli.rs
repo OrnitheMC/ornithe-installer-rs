@@ -1,7 +1,8 @@
-use std::{collections::HashMap, io::Write, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use clap::{ArgMatches, Command, arg, command, value_parser};
-use log::info;
+use indicatif::{ProgressBar, ProgressStyle};
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
 use crate::{
     errors::InstallerError,
@@ -80,7 +81,7 @@ pub async fn run() {
                 .arg(arg!(--"show-historical" "Include historical versions")),
         )
         .subcommand(
-            Command::new("loader-versions")
+            add_gen_argument(Command::new("loader-versions")
             .long_flag("list-loader-versions")
             .long_about("List available loader versions.")
                 .about("List available loader versions. Arguments: [--show-betas, --loader-type]")
@@ -88,7 +89,7 @@ pub async fn run() {
                 .arg(arg!(--"loader-type" <TYPE> "Loader type to use")
                 .default_value("fabric")
                 .ignore_case(true)
-                .value_parser(["fabric", "quilt"])),
+                .value_parser(["fabric", "quilt"]))),
         )
         .subcommand(Command::new("intermediary-generations")
         .long_flag("intermediary-generations")
@@ -98,18 +99,16 @@ pub async fn run() {
     match parse(matches).await {
         Ok(r) => {
             if r == InstallationResult::Installed {
-                info!("Installation complete!");
-                info!("Ornithe has been successfully installed.");
-                info!(
+                println!("Installation complete!");
+                println!("Ornithe has been successfully installed.");
+                println!(
                     "Most mods require that you also download the Ornithe Standard Libraries mod and place it in your mods folder."
                 );
-                info!("You can find it at {}", crate::OSL_MODRINTH_URL);
+                println!("You can find it at {}", crate::OSL_MODRINTH_URL);
             }
         }
         Err(e) => {
-            std::io::stderr()
-                .write_all(("Failed to load Ornithe Installer CLI: ".to_owned() + &e.0).as_bytes())
-                .expect("Failed to print error!");
+            println!("Error while running Ornithe Installer CLI: {}", &e.0);
         }
     }
 }
@@ -117,20 +116,13 @@ pub async fn run() {
 async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError> {
     if let Some(_) = matches.subcommand_matches("intermediary-generations") {
         let generations = crate::net::meta::fetch_intermediary_generations().await?;
-        writeln!(
-            std::io::stdout(),
-            "Latest Generation: {}",
-            generations.latest
-        )?;
-        writeln!(
-            std::io::stdout(),
-            "Stable Generation: {}",
-            generations.stable
-        )?;
+        println!("Latest Generation: {}", generations.latest);
+        println!("Stable Generation: {}", generations.stable);
         return Ok(InstallationResult::NotInstalled);
     }
     if let Some(matches) = matches.subcommand_matches("loader-versions") {
-        let versions = crate::net::meta::fetch_loader_versions().await?;
+        let generation = matches.get_one::<u32>("gen").map(|u| *u);
+        let versions = crate::net::meta::fetch_loader_versions(&generation).await?;
         let loader_type = get_loader_type(matches)?;
         let betas = matches.get_flag("show-betas");
 
@@ -140,8 +132,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
                 out += &(version.version.clone() + " ");
             }
         }
-        writeln!(
-            std::io::stdout(),
+        println!(
             "Latest {} Loader version: {}",
             loader_type.get_localized_name(),
             versions
@@ -149,13 +140,12 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
                 .and_then(|list| list.get(0))
                 .map(|v| v.version.clone())
                 .unwrap_or("<not available>".to_owned())
-        )?;
-        writeln!(
-            std::io::stdout(),
+        );
+        println!(
             "Available {} Loader versions:",
             loader_type.get_localized_name()
-        )?;
-        writeln!(std::io::stdout(), "{}", out)?;
+        );
+        println!("{}", out);
 
         return Ok(InstallationResult::NotInstalled);
     }
@@ -181,22 +171,51 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
                 out += &(version.id.clone() + " ");
             }
         }
-        writeln!(std::io::stdout(), "Available Minecraft versions:\n")?;
-        writeln!(std::io::stdout(), "{}", out)?;
+        println!("Available Minecraft versions:\n");
+        println!("{}", out);
         return Ok(InstallationResult::NotInstalled);
     }
 
-    let loader_versions = crate::net::meta::fetch_loader_versions().await?;
+    let (send, mut recv) = unbounded_channel();
 
+    let fut = tokio::spawn(do_install(send, matches));
+    let pb = ProgressBar::new(100).with_style(
+        ProgressStyle::with_template("[{wide_bar:.green/cyan}] [{percent}%] ")
+            .unwrap()
+            .progress_chars("#>-"),
+    );
+    pb.enable_steady_tick(Duration::from_millis(100));
+    pb.set_position(0);
+
+    while !fut.is_finished() || !recv.is_empty() {
+        match recv.try_recv() {
+            Ok((prog, msg)) => {
+                pb.println(msg);
+                pb.set_position((prog * 100.0) as u64);
+            }
+            Err(_) => {}
+        }
+    }
+    pb.finish_and_clear();
+    return fut.await.unwrap();
+}
+
+async fn do_install(
+    send: UnboundedSender<(f32, String)>,
+    matches: ArgMatches,
+) -> Result<InstallationResult, InstallerError> {
     if let Some(matches) = matches.subcommand_matches("client") {
         let (minecraft_version, intermediary, info) =
             get_minecraft_version(matches, GameSide::Client).await?;
         let loader_type = get_loader_type(matches)?;
-        let loader_versions = loader_versions.get(&loader_type).unwrap();
+        let all_loader_versions =
+            crate::net::meta::fetch_loader_versions(&info.calamus_generation).await?;
+        let loader_versions = all_loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let location = matches.get_one::<PathBuf>("dir").unwrap().clone();
         let create_profile = matches.get_flag("generate-profile");
         crate::actions::client::install(
+            send,
             minecraft_version,
             intermediary,
             loader_type,
@@ -212,14 +231,18 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
     if let Some(matches) = matches.subcommand_matches("server") {
         let (minecraft_version, intermediary, info) =
             get_minecraft_version(matches, GameSide::Server).await?;
+
         let loader_type = get_loader_type(matches)?;
-        let loader_versions = loader_versions.get(&loader_type).unwrap();
+        let all_loader_versions =
+            crate::net::meta::fetch_loader_versions(&info.calamus_generation).await?;
+        let loader_versions = all_loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let location = matches.get_one::<PathBuf>("dir").unwrap().clone();
         if let Some(matches) = matches.subcommand_matches("run") {
             let java = matches.get_one::<PathBuf>("java");
             let run_args = matches.get_one::<String>("args");
-            crate::actions::server::install_and_run(
+            let installed = crate::actions::server::install_and_run(
+                send,
                 minecraft_version,
                 intermediary,
                 loader_type,
@@ -230,9 +253,13 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
                 run_args.map(|s| s.split(" ")),
             )
             .await?;
-            return Ok(InstallationResult::Installed);
+            return Ok(match installed {
+                true => InstallationResult::Installed,
+                false => InstallationResult::NotInstalled,
+            });
         }
         crate::actions::server::install(
+            send,
             minecraft_version,
             intermediary,
             loader_type,
@@ -249,7 +276,9 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         let (minecraft_version, intermediary, info) =
             get_minecraft_version(matches, GameSide::Server).await?;
         let loader_type = get_loader_type(matches)?;
-        let loader_versions = loader_versions.get(&loader_type).unwrap();
+        let all_loader_versions =
+            crate::net::meta::fetch_loader_versions(&info.calamus_generation).await?;
+        let loader_versions = all_loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let output_dir = matches.get_one::<PathBuf>("dir").unwrap().clone();
         let copy_profile_path = matches
@@ -258,6 +287,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
             .clone();
         let generate_zip = matches.get_one::<bool>("generate-zip").unwrap().clone();
         crate::actions::mmc_pack::install(
+            send,
             minecraft_version,
             intermediary,
             loader_type,

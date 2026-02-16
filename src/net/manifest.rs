@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::errors::InstallerError;
+use crate::{errors::InstallerError, net::meta};
 
 use super::GameSide;
 
@@ -24,8 +24,21 @@ pub async fn fetch_versions(generation: &Option<u32>) -> Result<VersionManifest,
         .map_err(|e| e.into())
 }
 
+pub async fn vanilla_profile_name(
+    version: &str,
+    generation: &Option<u32>,
+) -> Result<String, InstallerError> {
+    let intermediary_gen = if let Some(g) = generation {
+        g
+    } else {
+        &meta::fetch_intermediary_generations().await?.latest
+    };
+    Ok(format!("{}-gen{}", version, intermediary_gen))
+}
+
 pub async fn fetch_launch_json(
     version: &MinecraftVersion,
+    generation: &Option<u32>,
 ) -> Result<(String, String), InstallerError> {
     let res = super::CLIENT.get(&version.url).send().await?.text().await;
     let mut json = match res {
@@ -36,21 +49,22 @@ pub async fn fetch_launch_json(
             }
         },
         Err(e) => {
-            return Err(InstallerError(format!(
-                "{}, Couldn't deserialize into string!",
-                e
+            return Err(InstallerError::from(t!(
+                "manifest.error.failed_to_deserialize",
+                error = e.to_string()
             )));
         }
     };
+
     if let Some(val) = json.as_object_mut() {
-        let version_id = format!("{}-vanilla", version.id.clone());
+        let version_id = vanilla_profile_name(&version.id, generation).await?;
         val.insert("id".to_string(), Value::String(version_id.clone()));
 
         return Ok((version_id, serde_json::to_string(val)?));
     }
-    Err(InstallerError(
-        "Error while fetching launch json from manifest".to_string(),
-    ))
+    Err(InstallerError::from(t!(
+        "manifest.error.fetching_launch_json"
+    )))
 }
 
 async fn fetch_version_details(
@@ -106,9 +120,10 @@ impl MinecraftVersion {
             GameSide::Client => downloads.client,
             GameSide::Server => downloads.server,
         }
-        .ok_or(InstallerError(
-            "Version does not have download for side ".to_owned() + side.id(),
-        ))
+        .ok_or(InstallerError::from(t!(
+            "manifest.error.no_download_for_version",
+            side = side.id()
+        )))
     }
 
     pub fn is_snapshot(&self) -> bool {
@@ -176,7 +191,8 @@ pub async fn find_lwjgl_url_version(
         }
     }
 
-    Err(InstallerError(
-        "Unable to find lwjgl version for Minecraft ".to_owned() + &version.id,
-    ))
+    Err(InstallerError::from(t!(
+        "manifest.error.no_lwjgl",
+        mc_version = &version.id
+    )))
 }
