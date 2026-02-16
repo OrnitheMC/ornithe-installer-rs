@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::errors::InstallerError;
+use crate::{errors::InstallerError, net::meta};
 
 use super::GameSide;
 
@@ -24,8 +24,21 @@ pub async fn fetch_versions(generation: &Option<u32>) -> Result<VersionManifest,
         .map_err(|e| e.into())
 }
 
+pub async fn vanilla_profile_name(
+    version: &str,
+    generation: &Option<u32>,
+) -> Result<String, InstallerError> {
+    let intermediary_gen = if let Some(g) = generation {
+        g
+    } else {
+        &meta::fetch_intermediary_generations().await?.latest
+    };
+    Ok(format!("{}-gen{}", version, intermediary_gen))
+}
+
 pub async fn fetch_launch_json(
     version: &MinecraftVersion,
+    generation: &Option<u32>,
 ) -> Result<(String, String), InstallerError> {
     let res = super::CLIENT.get(&version.url).send().await?.text().await;
     let mut json = match res {
@@ -42,8 +55,9 @@ pub async fn fetch_launch_json(
             )));
         }
     };
+
     if let Some(val) = json.as_object_mut() {
-        let version_id = format!("{}-vanilla", version.id.clone());
+        let version_id = vanilla_profile_name(&version.id, generation).await?;
         val.insert("id".to_string(), Value::String(version_id.clone()));
 
         return Ok((version_id, serde_json::to_string(val)?));

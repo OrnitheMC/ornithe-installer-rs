@@ -90,7 +90,7 @@ pub async fn install(
     )
     .await?;
     let minecraft_patch_json =
-        get_mmc_launch_json(&version, &lwjgl_version, &ornithe_launch_json).await?;
+        get_mmc_launch_json(&version, &generation, &lwjgl_version, &ornithe_launch_json).await?;
 
     let profile_name = format!(
         "Ornithe Gen{calamus_gen} {} {}",
@@ -295,11 +295,12 @@ async fn transform_pack_json(
 
 async fn get_mmc_launch_json(
     version: &MinecraftVersion,
+    generation: &Option<u32>,
     lwjgl_version: &String,
     ornithe_launch_json: &Value,
 ) -> Result<String, InstallerError> {
     let client_name = format!("com.mojang:minecraft:{}:client", version.id);
-    let (_, vanilla_launch_json) = manifest::fetch_launch_json(version).await?;
+    let (_, vanilla_launch_json) = manifest::fetch_launch_json(version, &generation).await?;
     let vanilla_json = serde_json::from_str::<Value>(&vanilla_launch_json)?;
 
     let client = vanilla_json["downloads"]["client"].as_object().unwrap();

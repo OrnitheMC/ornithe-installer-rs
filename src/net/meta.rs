@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::errors::InstallerError;
+use crate::{errors::InstallerError, net::manifest};
 
 use super::GameSide;
 
@@ -104,6 +104,9 @@ pub async fn fetch_launch_json(
             "Launch Json does not contain 'id' key!".to_string(),
         ))?
         .to_owned();
+
+    text["inheritsFrom"] =
+        Value::String(manifest::vanilla_profile_name(&intermediary.version, generation).await?);
 
     let library_upgrades = super::CLIENT
         .get(META_URL.to_owned() + &format!("/v3/versions/libraries/{}", &intermediary.version))
