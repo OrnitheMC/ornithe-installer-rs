@@ -100,9 +100,7 @@ pub async fn fetch_launch_json(
         .await?;
     let version_id = text["id"]
         .as_str()
-        .ok_or(InstallerError(
-            "Launch Json does not contain 'id' key!".to_string(),
-        ))?
+        .ok_or(InstallerError::from(t!("meta.error.launch_json_no_id")))?
         .to_owned();
 
     text["inheritsFrom"] =

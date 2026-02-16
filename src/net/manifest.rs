@@ -49,9 +49,9 @@ pub async fn fetch_launch_json(
             }
         },
         Err(e) => {
-            return Err(InstallerError(format!(
-                "{}, Couldn't deserialize into string!",
-                e
+            return Err(InstallerError::from(t!(
+                "manifest.error.failed_to_deserialize",
+                error = e.to_string()
             )));
         }
     };
@@ -62,9 +62,9 @@ pub async fn fetch_launch_json(
 
         return Ok((version_id, serde_json::to_string(val)?));
     }
-    Err(InstallerError(
-        "Error while fetching launch json from manifest".to_string(),
-    ))
+    Err(InstallerError::from(t!(
+        "manifest.error.fetching_launch_json"
+    )))
 }
 
 async fn fetch_version_details(
@@ -120,9 +120,10 @@ impl MinecraftVersion {
             GameSide::Client => downloads.client,
             GameSide::Server => downloads.server,
         }
-        .ok_or(InstallerError(
-            "Version does not have download for side ".to_owned() + side.id(),
-        ))
+        .ok_or(InstallerError::from(t!(
+            "manifest.error.no_download_for_version",
+            side = side.id()
+        )))
     }
 
     pub fn is_snapshot(&self) -> bool {
@@ -190,7 +191,8 @@ pub async fn find_lwjgl_url_version(
         }
     }
 
-    Err(InstallerError(
-        "Unable to find lwjgl version for Minecraft ".to_owned() + &version.id,
-    ))
+    Err(InstallerError::from(t!(
+        "manifest.error.no_lwjgl",
+        mc_version = &version.id
+    )))
 }

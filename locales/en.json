@@ -68,5 +68,9 @@
     "server.error.library_failed":"Failed to download library: %{error}",
     "server.error.libraries_failed":"Failed to download libraries: %{error}",
     "server.error.failed_to_find_manifest_attribute":"Couldn't find '%{attribute}' attribute in jar manifest!",
-    "server.error.":""
+    "meta.error.launch_json_no_id": "Launch Json does not contain 'id' key!",
+    "manifest.error.failed_to_deserialize": "Couldn't deserialize into string: %{error}",
+    "manifest.error.fetching_launch_json": "Error while fetching launch json from manifest",
+    "manifest.error.no_download_for_version": "Version does not have download for side %{side}",
+    "manifest.error.no_lwjgl": "Unable to find lwjgl version for Minecraft %{mc_version}"
 }
