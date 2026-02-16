@@ -63,7 +63,7 @@ jobs:
           distribution: "microsoft"
           java-version: 21
       - name: Setup Gradle
-        uses: https://github.com/gradle/actions/setup-gradle@v5.0.0
+        uses: gradle/actions/setup-gradle@v5.0.0
         with:
           cache-read-only: true
       - name: Download jar artifact
@@ -132,7 +132,7 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/wrapper-validation@v3
       - name: Setup Gradle
-        uses: https://github.com/gradle/actions/setup-gradle@v5.0.0
+        uses: gradle/actions/setup-gradle@v5.0.0
         with:
           cache-read-only: true
       - name: Download jar artifact
@@ -216,7 +216,7 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/wrapper-validation@v3
       - name: Setup Gradle
-        uses: https://github.com/gradle/actions/setup-gradle@v5.0.0
+        uses: gradle/actions/setup-gradle@v5.0.0
         with:
           cache-read-only: true
       - name: Download jar artifact
