@@ -6,8 +6,8 @@ use std::{
 };
 
 use egui::{
-    Button, Color32, ComboBox, FontId, Frame, Layout, ProgressBar, RichText, Sense, Theme,
-    UiBuilder, Vec2, Vec2b,
+    Button, Checkbox, Color32, ComboBox, FontId, Frame, Layout, ProgressBar, RichText, Sense,
+    Theme, UiBuilder, Vec2, Vec2b,
 };
 use log::{error, info};
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
@@ -24,6 +24,12 @@ use crate::{
         meta::{IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
+
+use egui::{
+    Id, Response, ScrollArea, TextEdit, Ui, Widget, WidgetText,
+    text::{CCursor, CCursorRange},
+};
+use std::hash::Hash;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 enum Mode {
@@ -125,6 +131,7 @@ struct App {
     ),
     file_picker_open: bool,
     minecraft_version_dropdown_open: bool,
+    detonation_easter_egg: bool,
 }
 
 pub struct InstallationProgress {
@@ -241,60 +248,84 @@ impl App {
             file_picker_open: false,
             installation_task: None,
             minecraft_version_dropdown_open: false,
+            detonation_easter_egg: rand::random_bool(0.001),
         };
         app.filter_minecraft_versions();
         Ok(app)
     }
 
     fn add_location_picker(&mut self, frame: &mut eframe::Frame, ui: &mut egui::Ui) {
-        ui.text_edit_singleline(match self.mode {
-            Mode::Client => &mut self.client_install_location,
-            Mode::Server => &mut self.server_install_location,
-            Mode::MMC => &mut self.mmc_output_location,
-        });
-        if ui.button(t!("gui.ui.button.pick_location")).clicked() {
-            let picked = AsyncFileDialog::new()
-                .set_directory(Path::new(match self.mode {
-                    Mode::Client => &self.client_install_location,
-                    Mode::Server => &self.server_install_location,
-                    Mode::MMC => &self.mmc_output_location,
-                }))
-                .set_parent(&frame)
-                .pick_folder();
-            self.file_picker_open = true;
-            let sender = self.file_picker_channel.0.clone();
-            let mode = self.mode.clone();
-            let ctx = ui.ctx().clone();
-            tokio::spawn(async move {
-                let opt = picked.await;
-                let mut send = None;
-                if let Some(path) = opt {
-                    if let Some(path) = path.path().to_str() {
-                        send = Some(FilePickResult {
-                            mode,
-                            path: path.to_owned(),
-                        });
-                    }
-                }
-                let _ = sender.send(send);
-                ctx.request_repaint();
+        let mut line_rect = ui.available_rect_before_wrap();
+        line_rect.max.y = ui.cursor().min.y + 25.0;
+        line_rect.min.y -= 6.0;
+        let mut child = ui.new_child(UiBuilder::new().max_rect(line_rect));
+        child.horizontal_centered(|ui| {
+            ui.text_edit_singleline(match self.mode {
+                Mode::Client => &mut self.client_install_location,
+                Mode::Server => &mut self.server_install_location,
+                Mode::MMC => &mut self.mmc_output_location,
             });
-        }
+            if ui.button(t!("gui.ui.button.pick_location")).clicked() {
+                let picked = AsyncFileDialog::new()
+                    .set_directory(Path::new(match self.mode {
+                        Mode::Client => &self.client_install_location,
+                        Mode::Server => &self.server_install_location,
+                        Mode::MMC => &self.mmc_output_location,
+                    }))
+                    .set_parent(&frame)
+                    .pick_folder();
+                self.file_picker_open = true;
+                let sender = self.file_picker_channel.0.clone();
+                let mode = self.mode.clone();
+                let ctx = ui.ctx().clone();
+                tokio::spawn(async move {
+                    let opt = picked.await;
+                    let mut send = None;
+                    if let Some(path) = opt {
+                        if let Some(path) = path.path().to_str() {
+                            send = Some(FilePickResult {
+                                mode,
+                                path: path.to_owned(),
+                            });
+                        }
+                    }
+                    let _ = sender.send(send);
+                    ctx.request_repaint();
+                });
+            }
+        });
+        ui.add_space(20.0);
     }
 
     fn add_environment_options(&mut self, ui: &mut egui::Ui) {
         ui.label(t!("gui.ui.environment"));
-        ui.horizontal(|ui| {
-            if ui
-                .radio_value(&mut self.mode, Mode::Client, "Client (Official Launcher)")
-                .clicked()
-                || ui
-                    .radio_value(&mut self.mode, Mode::MMC, "MultiMC/PrismLauncher")
-                    .clicked()
-                || ui
-                    .radio_value(&mut self.mode, Mode::Server, "Server")
-                    .clicked()
-            {
+        let mut line_rect = ui.available_rect_before_wrap();
+        line_rect.max.y = ui.cursor().min.y + 25.0;
+        line_rect.min.y -= 6.0;
+        let mut child = ui.new_child(UiBuilder::new().max_rect(line_rect));
+        ui.add_space(20.0);
+        child.horizontal_centered(|ui| {
+            let mut clicked = false;
+            let width = line_rect.width() / 2.0;
+            ui.scope(|ui| {
+                ui.set_max_width(width);
+                clicked |= ui
+                    .radio_value(&mut self.mode, Mode::Client, t!("gui.mode.client"))
+                    .clicked();
+            });
+            ui.scope(|ui| {
+                ui.set_max_width(width);
+                clicked |= ui
+                    .radio_value(&mut self.mode, Mode::MMC, t!("gui.mode.mmc"))
+                    .clicked();
+            });
+            ui.scope(|ui| {
+                ui.set_max_width(width);
+                clicked |= ui
+                    .radio_value(&mut self.mode, Mode::Server, t!("gui.mode.server"))
+                    .clicked();
+            });
+            if clicked {
                 self.filter_minecraft_versions();
             }
         });
@@ -302,7 +333,12 @@ impl App {
 
     fn add_minecraft_version(&mut self, ui: &mut egui::Ui) {
         ui.label(t!("gui.ui.minecraft_version"));
-        ui.horizontal(|ui| {
+        let mut line_rect = ui.available_rect_before_wrap();
+        line_rect.max.y = ui.cursor().min.y + 25.0;
+        line_rect.min.y -= 6.0;
+        let mut child = ui.new_child(UiBuilder::new().max_rect(line_rect));
+
+        child.horizontal_centered(|ui| {
             ui.add(
                 DropDownBox::from_iter(
                     &self.filtered_minecraft_versions,
@@ -329,6 +365,7 @@ impl App {
                 self.filter_minecraft_versions();
             }
         });
+        ui.add_space(20.0);
     }
 
     fn filter_minecraft_versions(&mut self) {
@@ -370,7 +407,12 @@ impl App {
 
     fn add_loader(&mut self, ui: &mut egui::Ui) {
         ui.label(t!("gui.ui.loader"));
-        ui.horizontal(|ui| {
+        let mut line_rect = ui.available_rect_before_wrap();
+        line_rect.max.y = ui.cursor().min.y + 25.0;
+        line_rect.min.y -= 6.0;
+        let mut child = ui.new_child(UiBuilder::new().max_rect(line_rect));
+        ui.add_space(20.0);
+        child.horizontal_centered(|ui| {
             let loader_type_response = ComboBox::from_id_salt("loader_type")
                 .selected_text(t!(
                     "gui.ui.selection.loader.name",
@@ -419,7 +461,8 @@ impl App {
                         }
                     }
                 });
-            let checkbox_response = ui.checkbox(&mut self.show_betas, "Show Betas");
+            let checkbox_response =
+                ui.checkbox(&mut self.show_betas, t!("gui.ui.show_loader_betas"));
             if !self
                 .available_loader_versions
                 .get(&self.selected_loader_type)
@@ -588,7 +631,12 @@ impl App {
     }
 
     fn add_additional_options(&mut self, ui: &mut egui::Ui) {
-        match self.mode {
+        let mut line_rect = ui.available_rect_before_wrap();
+        line_rect.max.y = ui.cursor().min.y + 25.0;
+        line_rect.min.y -= 6.0;
+        let mut child = ui.new_child(UiBuilder::new().max_rect(line_rect));
+        ui.add_space(20.0);
+        child.horizontal_centered(|ui| match self.mode {
             Mode::Client => {
                 ui.checkbox(
                     &mut self.create_profile,
@@ -602,19 +650,17 @@ impl App {
                 );
             }
             Mode::MMC => {
-                ui.horizontal(|ui| {
-                    ui.checkbox(
-                        &mut self.copy_generated_location,
-                        t!("gui.checkbox.copy_profile_path"),
-                    );
-
-                    ui.checkbox(
-                        &mut self.generate_zip,
-                        t!("gui.checkbox.generate_instance_zip"),
-                    );
-                });
+                let copy_profile_path = Checkbox::new(
+                    &mut self.copy_generated_location,
+                    t!("gui.checkbox.copy_profile_path"),
+                );
+                ui.add_sized([ui.max_rect().width() / 2.0, 20.0], copy_profile_path);
+                ui.checkbox(
+                    &mut self.generate_zip,
+                    t!("gui.checkbox.generate_instance_zip"),
+                );
             }
-        }
+        });
     }
 
     fn get_intermediary_version(
@@ -658,30 +704,30 @@ impl eframe::App for App {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            ui.style_mut().interaction.selectable_labels = false;
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
             ui.add_enabled_ui(!self.file_picker_open, |ui| {
                 let mut child =
                     ui.new_child(UiBuilder::new().layout(Layout::right_to_left(egui::Align::TOP)));
                 ui.vertical_centered(|ui| {
-                    ui.heading("Ornithe Installer");
+                    ui.heading(t!("gui.ui.title"));
                 });
-                {
-                    child.horizontal(|ui| {
-                        ComboBox::from_id_salt("language")
-                            .width(20.0)
-                            .selected_text(&*rust_i18n::locale())
-                            .show_ui(ui, |ui| {
-                                for ele in rust_i18n::available_locales!() {
-                                    if ui
-                                        .selectable_label(*ele == *rust_i18n::locale(), ele)
-                                        .clicked()
-                                    {
-                                        rust_i18n::set_locale(ele);
-                                    }
+                child.horizontal(|ui| {
+                    ComboBox::from_id_salt("language")
+                        .width(20.0)
+                        .selected_text(&*rust_i18n::locale())
+                        .show_ui(ui, |ui| {
+                            for ele in rust_i18n::available_locales!() {
+                                if ui
+                                    .selectable_label(*ele == *rust_i18n::locale(), ele)
+                                    .clicked()
+                                {
+                                    rust_i18n::set_locale(ele);
                                 }
-                            });
-                        ui.label(t!("gui.ui.language"));
-                    });
-                };
+                            }
+                        });
+                    ui.label(t!("gui.ui.language"));
+                });
 
                 if self.installation_task.is_some() {
                     ui.vertical(|ui| {
@@ -756,11 +802,15 @@ impl eframe::App for App {
 
                     ui.add_space(15.0);
                     ui.label(if self.mode == Mode::MMC && self.generate_zip {
-                        t!("gui.ui.output_location")
+                        if *rust_i18n::locale() == *"fr" && self.detonation_easter_egg {
+                            std::borrow::Cow::Borrowed("Emplacement de detonation")
+                        } else {
+                            t!("gui.ui.output_location")
+                        }
                     } else {
                         t!("gui.ui.install_location")
                     });
-                    ui.horizontal(|ui| self.add_location_picker(frame, ui));
+                    self.add_location_picker(frame, ui);
                 });
 
                 ui.add_space(15.0);
@@ -782,12 +832,6 @@ impl eframe::App for App {
         self.monitor_installation();
     }
 }
-
-use egui::{
-    Id, Response, ScrollArea, TextEdit, Ui, Widget, WidgetText,
-    text::{CCursor, CCursorRange},
-};
-use std::hash::Hash;
 
 /// Dropdown widget (https://github.com/ItsEthra/egui-dropdown/pull/21, with slight changes)
 pub struct DropDownBox<

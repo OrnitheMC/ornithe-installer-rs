@@ -1,5 +1,6 @@
 {
     "_version": 1,
+    "gui.ui.title": "Ornithe Installer",
     "gui.ui.language": "Language: ",
     "gui.error.no_available_minecraft_versions":"Could not find any available Minecraft versions. Make sure you are connected to the internet!",
     "gui.ui.button.pick_location":"Pick Location",
@@ -29,6 +30,10 @@
     "gui.ui.install_location": "Install Location",
     "gui.button.install": "Install",
     "gui.error.generic": "Ornithe Installer Error",
+    "gui.mode.client": "Client (Official Launcher)",
+    "gui.mode.mmc": "MultiMC/PrismLauncher",
+    "gui.mode.server": "Server",
+    "gui.ui.show_loader_betas": "Show Betas",
     "client.error.directory_does_not_exist": "The directory %{dir} does not exist. Make sure you selected the correct folder and that you have started the game at least once before.",
     "client.info.installation_start": "Installing client for %{version} using %{loader} Loader %{loader_version} to %{destination}",
     "client.info.fetching_launch_jsons": "Fetching launch jsons...",
