@@ -46,13 +46,14 @@ pub async fn install(
 
     let _ = sender.send((
         1.0,
-        format!(
-            "Installed Ornithe Server for Minecraft {} using {} Loader {} to {}",
-            &version.id,
-            &loader_type.get_localized_name(),
-            &loader_version.version,
-            &location.to_str().unwrap_or_default()
-        ),
+        t!(
+            "server.info.installed",
+            version = version.id,
+            loader = loader_type.get_localized_name(),
+            loader_version = loader_version.version,
+            destination = location.display()
+        )
+        .into(),
     ));
 
     Ok(())
@@ -75,13 +76,14 @@ async fn install_path(
 
     let _ = sender.send((
         0.1,
-        format!(
-            "Installing server for {} using {} Loader {} to {}",
-            version.id,
-            loader_type.get_localized_name(),
-            loader_version.version,
-            location.display()
-        ),
+        t!(
+            "server.info.starting_installation",
+            version = version.id,
+            loader = loader_type.get_localized_name(),
+            loader_version = loader_version.version,
+            destination = location.display()
+        )
+        .into(),
     ));
 
     let clear_paths = [location.join(".fabric"), location.join(".quilt")];
@@ -100,13 +102,12 @@ async fn install_path(
     )
     .await?;
 
-    let _ = sender.send((0.2, format!("Installing libraries")));
+    let _ = sender.send((0.2, t!("server.info.installing_libraries").into()));
 
     if !launch_json.is_object() {
-        return Err(InstallerError(
-            "Cannot create server installation due to server endpoint returning wrong type."
-                .to_owned(),
-        ));
+        return Err(InstallerError::from(t!(
+            "server.error.wrong_type_from_endpoint"
+        )));
     }
 
     let mut main_class = "";
@@ -116,13 +117,17 @@ async fn install_path(
         LoaderType::Fabric => {
             main_class = &launch_json["mainClass"]
                 .as_str()
-                .ok_or(InstallerError("Could not find main class entry".to_owned()))?;
+                .ok_or(InstallerError::from(t!(
+                    "server.error.could_not_find_main_class_entry"
+                )))?;
             launch_main_class = "net.fabricmc.loader.launch.server.FabricServerLauncher".to_owned();
         }
         LoaderType::Quilt => {
             launch_main_class = launch_json["launcherMainClass"]
                 .as_str()
-                .ok_or(InstallerError("Could not find main class entry".to_owned()))?
+                .ok_or(InstallerError::from(t!(
+                    "server.error.could_not_find_main_class_entry"
+                )))?
                 .to_owned();
         }
     }
@@ -138,7 +143,7 @@ async fn install_path(
 
     let libraries = launch_json["libraries"]
         .as_array()
-        .ok_or(InstallerError("No libraries were specified".to_owned()))?;
+        .ok_or(InstallerError::from(t!("server.error.no_libraries")))?;
 
     let mut library_files = JoinSet::new();
 
@@ -148,11 +153,11 @@ async fn install_path(
     for library in libraries {
         let name = library["name"]
             .as_str()
-            .ok_or(InstallerError("Library had no name!".to_owned()))?
+            .ok_or(InstallerError::from(t!("server.error.no_library_name")))?
             .to_owned();
         let url = library["url"]
             .as_str()
-            .ok_or(InstallerError("Library had no url!".to_owned()))?
+            .ok_or(InstallerError::from(t!("server.error.no_library_url")))?
             .to_owned();
 
         if name.matches("net\\.fabricmc:fabric-loader:.*").count() > 0 {
@@ -190,26 +195,38 @@ async fn install_path(
                     let num = downloaded_library_files.len();
                     let _ = sender.send((
                         (num as f32 / lib_count as f32) / 2.0 + 0.2,
-                        format!("Downloaded {}, {}/{}", name, num, lib_count),
+                        t!(
+                            "server.info.downloaded_library",
+                            name = name,
+                            num = num,
+                            lib_count = lib_count
+                        )
+                        .into(),
                     ));
                 }
                 Err(e) => {
-                    return Err(InstallerError(
-                        "Failed to download library: ".to_owned() + &e.0,
-                    ));
+                    return Err(InstallerError::from(t!(
+                        "server.error.library_failed",
+                        error = e.0
+                    )));
                 }
             },
             Err(e) => {
-                return Err(InstallerError(
-                    "Failed to download libraries: ".to_owned() + &e.to_string(),
-                ));
+                return Err(InstallerError::from(t!(
+                    "server.error.libraries_failed",
+                    error = e.to_string()
+                )));
             }
         }
     }
 
     let _ = sender.send((
         0.8,
-        format!("Downloaded {} libraries!", downloaded_library_files.len()),
+        t!(
+            "server.info.downloaded_libraries",
+            lib_count = downloaded_library_files.len()
+        )
+        .into(),
     ));
 
     if let Some(loader) = fabric_loader_artifact {
@@ -234,7 +251,7 @@ async fn install_path(
     .await?;
 
     if install_server {
-        let _ = sender.send((0.9, format!("Downloading server jar")));
+        let _ = sender.send((0.9, t!("server.info.downloading_server_jar").into()));
         let url = version
             .get_jar_download_url(&crate::net::GameSide::Server)
             .await?;
@@ -346,9 +363,10 @@ fn read_jar_manifest_attribute(
         }
     }
 
-    Err(InstallerError(
-        "Couldn't find '".to_owned() + attribute + "' attribute in jar manifest!",
-    ))
+    Err(InstallerError::from(t!(
+        "server.error.failed_to_find_manifest_attribute",
+        attribute = attribute
+    )))
 }
 
 async fn download_library(
@@ -415,7 +433,7 @@ where
         .await?;
     }
 
-    let _ = sender.send((0.95, format!("Starting server...")));
+    let _ = sender.send((0.95, t!("server.info.launching").into()));
 
     let mut java_binary = "java".to_owned();
     if let Some(arg) = java {

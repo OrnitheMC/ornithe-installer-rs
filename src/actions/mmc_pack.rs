@@ -33,27 +33,28 @@ pub async fn install(
 ) -> Result<(), InstallerError> {
     let _ = sender.send((
         0.1,
-        format!(
-            "Generating MMC/Prism instance for {} using {} Loader {} to {}",
-            version.id,
-            loader_type.get_localized_name(),
-            loader_version.version,
-            output_dir.display()
-        ),
+        t!(
+            "mmc.info.starting_installation",
+            version = version.id,
+            loader = loader_type.get_localized_name(),
+            loader_version = loader_version.version,
+            destination = output_dir.display()
+        )
+        .into(),
     ));
     if !output_dir.exists() {
         std::fs::create_dir_all(&output_dir)?;
     }
     let output_dir = output_dir.canonicalize()?;
 
-    let _ = sender.send((0.2, format!("Fetching version information...")));
+    let _ = sender.send((0.2, t!("mmc.info.fetching_version_information").into()));
     let intermediary_maven = intermediary_version
         .maven
         .clone()
         .strip_suffix(&(":".to_owned() + &intermediary_version.version))
-        .ok_or(InstallerError(
-            "Failed to retrieve intermediary maven coordinates".to_owned(),
-        ))?
+        .ok_or(InstallerError::from(t!(
+            "mmc.error.failed_to_retrieve_intermediary_coordinates"
+        )))?
         .to_owned();
 
     let (lwjgl_url, lwjgl_version) = manifest::find_lwjgl_url_version(&version).await?;
@@ -63,7 +64,7 @@ pub async fn install(
         None => meta::fetch_intermediary_generations().await?.stable,
     };
 
-    let _ = sender.send((0.4, format!("Transforming templates...")));
+    let _ = sender.send((0.4, t!("mmc.info.transforming_templates").into()));
 
     let mut transformed_pack_json = serde_json::from_str::<Value>(
         &transform_pack_json(
@@ -101,13 +102,15 @@ pub async fn install(
     } else {
         let dir = output_dir.join(profile_name.clone());
         if std::fs::exists(&dir).unwrap_or_default() {
-            return Err(InstallerError("Instance already exists".to_string()));
+            return Err(InstallerError::from(t!(
+                "mmc.error.instance_already_exists"
+            )));
         }
         std::fs::create_dir_all(&dir)?;
         dir
     };
 
-    let _ = sender.send((0.5, format!("Fetching library information...")));
+    let _ = sender.send((0.5, t!("mmc.info.fetching_library_information").into()));
 
     let MavenVersion {
         version: flap_version,
@@ -117,11 +120,15 @@ pub async fn install(
     let extra_libs = meta::fetch_profile_libraries(&generation, &version.id).await?;
     let _ = sender.send((
         0.6,
-        format!("Found {} library upgrade patches", extra_libs.len()),
+        t!(
+            "mmc.info.found_library_upgrades",
+            num_libraries = extra_libs.len()
+        )
+        .into(),
     ));
 
     let mut zip: Box<dyn Writer> = if generate_zip {
-        let _ = sender.send((0.65, format!("Generating instance zip...")));
+        let _ = sender.send((0.65, t!("mmc.info.generating_instance_zip").into()));
 
         if std::fs::exists(&output_file).unwrap_or_default() {
             std::fs::remove_file(&output_file)?;
@@ -129,7 +136,7 @@ pub async fn install(
         let file = std::fs::File::create_new(&output_file)?;
         Box::new(ZipWriter::new(file))
     } else {
-        let _ = sender.send((0.65, format!("Generating output files...")));
+        let _ = sender.send((0.65, t!("mmc.info.generating_output_files").into()));
 
         Box::new(output_file.clone())
     };
@@ -157,7 +164,7 @@ pub async fn install(
     )?;
 
     let pack_components = transformed_pack_json["components"].as_array_mut().unwrap();
-    let _ = sender.send((0.75, format!("Adding library components...")));
+    let _ = sender.send((0.75, t!("mmc.info.adding_library_components").into()));
     for library in extra_libs {
         let colons = library
             .name
@@ -170,7 +177,7 @@ pub async fn install(
             .name
             .get((colons.clone().next().unwrap() + 1)..colons.clone().last().unwrap())
             .unwrap();
-        let version = library.name.get(0..(colons.last().unwrap() + 1)).unwrap();
+        let version = library.name.get((colons.last().unwrap() + 1)..).unwrap();
         zip.write_file(&("patches/".to_owned() + &uid + ".json"), 
             format!(r#"{{"formatVersion": 1, "libraries": [{{"name": "{}","url": "{}"}}], "name": "{}", "type": "release", "uid": "{}", "version": "{}"}}"#,
              library.name, library.url, lib_name, uid, version).as_bytes())?;
@@ -235,14 +242,13 @@ pub async fn install(
     ))]
     {
         if copy_profile_path {
-            let mut cp = Clipboard::new().map_err(|e| InstallerError(e.to_string()))?;
-            cp.set()
-                .text(output_file.to_string_lossy().into_owned())
-                .map_err(|_| InstallerError("Failed to copy profile path".to_owned()))?;
+            Clipboard::new()
+                .and_then(|mut cp| cp.set().text(output_file.to_string_lossy().into_owned()))
+                .map_err(|_| InstallerError::from(t!("mmc.error.failed_to_copy_path")))?;
         }
     }
 
-    let _ = sender.send((1.0, format!("Done!")));
+    let _ = sender.send((1.0, t!("mmc.info.done").into()));
 
     Ok(())
 }

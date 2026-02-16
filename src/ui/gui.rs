@@ -1,11 +1,13 @@
 use std::{
     collections::HashMap,
+    fmt::Display,
     path::Path,
     sync::mpsc::{Receiver, Sender},
 };
 
 use egui::{
-    Button, Color32, ComboBox, FontId, Frame, ProgressBar, RichText, Sense, Theme, Vec2, Vec2b,
+    Button, Color32, ComboBox, FontId, Frame, Layout, ProgressBar, RichText, Sense, Theme,
+    UiBuilder, Vec2, Vec2b,
 };
 use log::{error, info};
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
@@ -36,7 +38,7 @@ pub async fn run() -> Result<(), InstallerError> {
     let res = create_window().await;
     if let Err(e) = res {
         error!("{}", e.0);
-        display_dialog("Ornithe Installer Error", &e.0);
+        display_dialog(t!("gui.error.generic"), &e.0);
         return Err(e);
     }
 
@@ -57,7 +59,7 @@ async fn create_window() -> Result<(), InstallerError> {
     let res = App::create().await;
     if let Err(e) = res {
         error!("{}", e.0);
-        display_dialog("Ornithe Installer Error", &e.0);
+        display_dialog(t!("gui.error.generic"), &e.0);
         return Ok(());
     }
     let app = res.unwrap();
@@ -70,12 +72,16 @@ async fn create_window() -> Result<(), InstallerError> {
     Ok(())
 }
 
-fn display_dialog(title: &str, message: &str) {
+fn display_dialog<T: Into<String> + Display, M: Into<String> + Display>(title: T, message: M) {
     display_dialog_ext(title, message, MessageButtons::Ok, |_| {});
 }
 
-fn display_dialog_ext<F>(title: &str, message: &str, buttons: MessageButtons, after: F)
-where
+fn display_dialog_ext<F, T: Into<String> + Display, M: Into<String> + Display>(
+    title: T,
+    message: M,
+    buttons: MessageButtons,
+    after: F,
+) where
     F: FnOnce(MessageDialogResult) -> (),
     F: Send,
     F: 'static,
@@ -187,9 +193,9 @@ impl App {
             }
         }
         if available_minecraft_versions.len() == 0 {
-            return Err(InstallerError(
-                "Could not find any available Minecraft versions. Make sure you are connected to the internet!".to_string(),
-            ));
+            return Err(InstallerError::from(t!(
+                "error.no_available_minecraft_versions"
+            )));
         }
         info!(
             "Loaded {} Minecraft versions",
@@ -246,7 +252,7 @@ impl App {
             Mode::Server => &mut self.server_install_location,
             Mode::MMC => &mut self.mmc_output_location,
         });
-        if ui.button("Pick Location").clicked() {
+        if ui.button(t!("gui.ui.button.pick_location")).clicked() {
             let picked = AsyncFileDialog::new()
                 .set_directory(Path::new(match self.mode {
                     Mode::Client => &self.client_install_location,
@@ -277,7 +283,7 @@ impl App {
     }
 
     fn add_environment_options(&mut self, ui: &mut egui::Ui) {
-        ui.label("Environment");
+        ui.label(t!("gui.ui.environment"));
         ui.horizontal(|ui| {
             if ui
                 .radio_value(&mut self.mode, Mode::Client, "Client (Official Launcher)")
@@ -295,7 +301,7 @@ impl App {
     }
 
     fn add_minecraft_version(&mut self, ui: &mut egui::Ui) {
-        ui.label("Minecraft Version");
+        ui.label(t!("gui.ui.minecraft_version"));
         ui.horizontal(|ui| {
             ui.add(
                 DropDownBox::from_iter(
@@ -311,11 +317,13 @@ impl App {
                 )
                 .max_height(130.0)
                 .desired_width(170.0)
-                .hint_text("Search available versions..."),
+                .hint_text(t!("gui.ui.search_available_versions")),
             );
-            if ui.checkbox(&mut self.show_snapshots, "Snapshots").clicked()
+            if ui
+                .checkbox(&mut self.show_snapshots, t!("gui.ui.checkbox.snapshots"))
+                .clicked()
                 || ui
-                    .checkbox(&mut self.show_historical, "Historical Versions")
+                    .checkbox(&mut self.show_historical, t!("gui.ui.checkbox.historical"))
                     .clicked()
             {
                 self.filter_minecraft_versions();
@@ -361,12 +369,12 @@ impl App {
     }
 
     fn add_loader(&mut self, ui: &mut egui::Ui) {
-        ui.label("Loader");
+        ui.label(t!("gui.ui.loader"));
         ui.horizontal(|ui| {
             let loader_type_response = ComboBox::from_id_salt("loader_type")
-                .selected_text(format!(
-                    "{} Loader",
-                    &self.selected_loader_type.get_localized_name()
+                .selected_text(t!(
+                    "gui.ui.selection.loader.name",
+                    name = &self.selected_loader_type.get_localized_name()
                 ))
                 .show_ui(ui, |ui| {
                     let mut changed = false;
@@ -374,20 +382,26 @@ impl App {
                         .selectable_value(
                             &mut self.selected_loader_type,
                             LoaderType::Fabric,
-                            "Fabric Loader",
+                            t!(
+                                "gui.ui.selection.loader.name",
+                                name = LoaderType::Fabric.get_localized_name()
+                            ),
                         )
                         .changed();
                     changed |= ui
                         .selectable_value(
                             &mut self.selected_loader_type,
                             LoaderType::Quilt,
-                            "Quilt Loader",
+                            t!(
+                                "gui.ui.selection.loader.name",
+                                name = LoaderType::Quilt.get_localized_name()
+                            ),
                         )
                         .changed();
                     changed
                 });
 
-            ui.label("Version: ");
+            ui.label(t!("gui.ui.loader_version"));
             ComboBox::from_id_salt("loader_version")
                 .selected_text(format!("{}", &self.selected_loader_version))
                 .show_ui(ui, |ui| {
@@ -455,7 +469,7 @@ impl App {
                         match self.get_intermediary_version(&selected_version, GameSide::Client) {
                             Ok(v) => v,
                             Err(e) => {
-                                display_dialog("Installation Failed", &e.0);
+                                display_dialog(t!("gui.error.installation_failed"), &e.0);
                                 return;
                             }
                         };
@@ -479,7 +493,7 @@ impl App {
                         match self.get_intermediary_version(&selected_version, GameSide::Server) {
                             Ok(v) => v,
                             Err(e) => {
-                                display_dialog("Installation Failed", &e.0);
+                                display_dialog(t!("gui.error.installation_failed"), e.0);
                                 return;
                             }
                         };
@@ -506,7 +520,7 @@ impl App {
                         match self.get_intermediary_version(&selected_version, GameSide::Client) {
                             Ok(v) => v,
                             Err(e) => {
-                                display_dialog("Installation Failed", &e.0);
+                                display_dialog(t!("gui.error.installation_failed"), e.0);
                                 return;
                             }
                         };
@@ -526,8 +540,8 @@ impl App {
             }
         } else {
             display_dialog(
-                "Installation Failed",
-                "No supported Minecraft version is selected",
+                t!("gui.error.installation_failed"),
+                t!("gui.error.no_supported_minecraft_version_selected"),
             );
         }
     }
@@ -545,18 +559,24 @@ impl App {
                         Err(e) => {
                             error!("{}", e.0);
                             display_dialog(
-                                "Installation Failed",
-                                &("Failed to install: ".to_owned() + &e.0),
+                                t!("gui.error.installation_failed"),
+                                t!("gui.error.failed_to_install", error = e.0),
                             )
                         }
                         Ok(_) => display_dialog_ext(
-                            "Installation Successful",
-                            "Ornithe has been successfully installed.\nMost mods require that you also download the Ornithe Standard Libraries mod and place it in your mods folder.\nWould you like to open OSL's modrinth page now?",
+                            t!("gui.dialog.installation_successful"),
+                            t!("gui.dialog.installation_successful.message"),
                             MessageButtons::YesNo,
                             |res| {
                                 if res == MessageDialogResult::Yes {
                                     if webbrowser::open(crate::OSL_MODRINTH_URL).is_err() {
-                                        display_dialog("Failed to open modrinth", &("Failed to open modrinth page for Ornithe Standard Libraries.\nYou can find it at ".to_owned()+crate::OSL_MODRINTH_URL).as_str());
+                                        display_dialog(
+                                            t!("gui.error.failed_to_open_modrinth"),
+                                            t!(
+                                                "error.failed_to_open_modrinth.message",
+                                                osl_url = crate::OSL_MODRINTH_URL
+                                            ),
+                                        );
                                     }
                                 }
                             },
@@ -570,22 +590,28 @@ impl App {
     fn add_additional_options(&mut self, ui: &mut egui::Ui) {
         match self.mode {
             Mode::Client => {
-                ui.checkbox(&mut self.create_profile, "Generate Profile");
+                ui.checkbox(
+                    &mut self.create_profile,
+                    t!("gui.checkbox.generate_profile"),
+                );
             }
             Mode::Server => {
                 ui.checkbox(
                     &mut self.download_minecraft_server,
-                    "Download Minecraft Server",
+                    t!("gui.checkbox.download_minecraft_server"),
                 );
             }
             Mode::MMC => {
                 ui.horizontal(|ui| {
                     ui.checkbox(
                         &mut self.copy_generated_location,
-                        "Copy Profile Path to Clipboard",
+                        t!("gui.checkbox.copy_profile_path"),
                     );
 
-                    ui.checkbox(&mut self.generate_zip, "Generate Instance Zip");
+                    ui.checkbox(
+                        &mut self.generate_zip,
+                        t!("gui.checkbox.generate_instance_zip"),
+                    );
                 });
             }
         }
@@ -608,9 +634,10 @@ impl App {
             }),
         }
         .map(|v| v.clone())
-        .ok_or(InstallerError(
-            "Failed to find matching intermediary version for ".to_owned() + &selected_version.id,
-        ))
+        .ok_or(InstallerError::from(t!(
+            "error.no_matching_intermediary_version",
+            version = selected_version.id
+        )))
     }
 }
 
@@ -632,16 +659,37 @@ impl eframe::App for App {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add_enabled_ui(!self.file_picker_open, |ui| {
+                let mut child =
+                    ui.new_child(UiBuilder::new().layout(Layout::right_to_left(egui::Align::TOP)));
                 ui.vertical_centered(|ui| {
                     ui.heading("Ornithe Installer");
                 });
+                {
+                    child.horizontal(|ui| {
+                        ComboBox::from_id_salt("language")
+                            .width(20.0)
+                            .selected_text(&*rust_i18n::locale())
+                            .show_ui(ui, |ui| {
+                                for ele in rust_i18n::available_locales!() {
+                                    if ui
+                                        .selectable_label(*ele == *rust_i18n::locale(), ele)
+                                        .clicked()
+                                    {
+                                        rust_i18n::set_locale(ele);
+                                    }
+                                }
+                            });
+                        ui.label(t!("gui.ui.language"));
+                    });
+                };
+
                 if self.installation_task.is_some() {
                     ui.vertical(|ui| {
                         let progress = self.installation_task.as_mut().unwrap();
                         ui.add_space(15.0);
                         progress.poll();
 
-                        ui.label("Output");
+                        ui.label(t!("gui.ui.output"));
                         let mut rect = ui.cursor();
                         let mut output_height = ui.available_height() - 44.0;
                         rect.set_width(ui.available_width());
@@ -680,7 +728,7 @@ impl eframe::App for App {
                             .ui(ui);
                     });
                     ui.vertical_centered(|ui| {
-                        let mut back = Button::new(RichText::new("Back").heading());
+                        let mut back = Button::new(RichText::new(t!("gui.button.back")).heading());
                         if self
                             .installation_task
                             .as_ref()
@@ -708,9 +756,9 @@ impl eframe::App for App {
 
                     ui.add_space(15.0);
                     ui.label(if self.mode == Mode::MMC && self.generate_zip {
-                        "Output Location"
+                        t!("gui.ui.output_location")
                     } else {
-                        "Install Location"
+                        t!("gui.ui.install_location")
                     });
                     ui.horizontal(|ui| self.add_location_picker(frame, ui));
                 });
@@ -720,7 +768,7 @@ impl eframe::App for App {
 
                 ui.add_space(15.0);
                 ui.vertical_centered(|ui| {
-                    if Button::new(RichText::new("Install").heading())
+                    if Button::new(RichText::new(t!("gui.button.install")).heading())
                         .min_size(Vec2::new(100.0, 0.0))
                         .ui(ui)
                         .clicked()

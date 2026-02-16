@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write, path::PathBuf, time::Duration};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use clap::{ArgMatches, Command, arg, command, value_parser};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -108,11 +108,7 @@ pub async fn run() {
             }
         }
         Err(e) => {
-            std::io::stderr()
-                .write_all(
-                    ("Error while running Ornithe Installer CLI: ".to_owned() + &e.0).as_bytes(),
-                )
-                .expect("Failed to print error!");
+            println!("Error while running Ornithe Installer CLI: {}", &e.0);
         }
     }
 }
