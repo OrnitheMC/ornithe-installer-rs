@@ -1,5 +1,6 @@
 {
     "_version": 1,
+    "language_name": "François",
     "gui.ui.title": "Installateur Ornithe",
     "gui.ui.language": "Langue : ",
     "gui.error.no_available_minecraft_versions":"Aucune version disponible de Minecraft n'a été trouvée. Assurez-vous d'être connecté à Internet !",
@@ -33,7 +34,7 @@
     "gui.mode.client": "Client (Lanceur officiel)",
     "gui.mode.mmc": "MultiMC/PrismLauncher",
     "gui.mode.server": "Serveur",
-    "gui.ui.show_loader_betas": "Shower les Betas",
+    "gui.ui.show_loader_betas": "Montrer les versions Bétas",
     "client.error.directory_does_not_exist": "Le dossier %{dir} n'existe pas. Assurez vous d'avoir sélectionné le bon dossier et lancé le jeu au moins une fois avant.",
     "client.info.installation_start": "Installation du client pour %{version} utilisant %{loader} Loader %{loader_version} vers %{destination}",
     "client.info.fetching_launch_jsons": "Récupération des jsons de lancement...",

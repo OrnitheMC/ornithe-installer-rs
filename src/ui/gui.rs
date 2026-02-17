@@ -6,8 +6,8 @@ use std::{
 };
 
 use egui::{
-    Button, Checkbox, Color32, ComboBox, FontId, Frame, Layout, ProgressBar, RichText, Sense,
-    Theme, UiBuilder, Vec2, Vec2b,
+    Align, Button, Checkbox, Color32, ComboBox, FontId, Frame, Layout, Margin, ProgressBar,
+    RichText, Sense, Theme, UiBuilder, Vec2, Vec2b,
 };
 use log::{error, info};
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
@@ -260,11 +260,19 @@ impl App {
         line_rect.min.y -= 6.0;
         let mut child = ui.new_child(UiBuilder::new().max_rect(line_rect));
         child.horizontal_centered(|ui| {
-            ui.text_edit_singleline(match self.mode {
+            let res = ui.text_edit_singleline(match self.mode {
                 Mode::Client => &mut self.client_install_location,
                 Mode::Server => &mut self.server_install_location,
                 Mode::MMC => &mut self.mmc_output_location,
             });
+            if !res.hovered() && !res.has_focus() {
+                ui.painter().rect_stroke(
+                    res.rect.expand(ui.visuals().widgets.hovered.expansion),
+                    ui.visuals().widgets.hovered.corner_radius,
+                    ui.visuals().widgets.hovered.bg_stroke,
+                    egui::StrokeKind::Inside,
+                );
+            }
             if ui.button(t!("gui.ui.button.pick_location")).clicked() {
                 let picked = AsyncFileDialog::new()
                     .set_directory(Path::new(match self.mode {
@@ -305,8 +313,10 @@ impl App {
         let mut child = ui.new_child(UiBuilder::new().max_rect(line_rect));
         ui.add_space(20.0);
         child.horizontal_centered(|ui| {
+            ui.spacing_mut().icon_width -= 4.0;
             let mut clicked = false;
             let width = line_rect.width() / 2.0;
+            let prev_mode = self.mode;
             ui.scope(|ui| {
                 ui.set_max_width(width);
                 clicked |= ui
@@ -325,7 +335,7 @@ impl App {
                     .radio_value(&mut self.mode, Mode::Server, t!("gui.mode.server"))
                     .clicked();
             });
-            if clicked {
+            if clicked && prev_mode != self.mode {
                 self.filter_minecraft_versions();
             }
         });
@@ -339,22 +349,31 @@ impl App {
         let mut child = ui.new_child(UiBuilder::new().max_rect(line_rect));
 
         child.horizontal_centered(|ui| {
-            ui.add(
-                DropDownBox::from_iter(
-                    &self.filtered_minecraft_versions,
-                    "minecraft_version",
-                    &mut self.selected_minecraft_version,
-                    |ui, text| {
-                        Button::selectable(false, text)
-                            .min_size(Vec2::new(ui.available_width(), 0.0))
-                            .ui(ui)
-                    },
-                    &mut self.minecraft_version_dropdown_open,
-                )
-                .max_height(130.0)
-                .desired_width(170.0)
-                .hint_text(t!("gui.ui.search_available_versions")),
-            );
+            let res = DropDownBox::from_iter(
+                &self.filtered_minecraft_versions,
+                "minecraft_version",
+                &mut self.selected_minecraft_version,
+                |ui, text| {
+                    Button::selectable(false, text)
+                        .min_size(Vec2::new(ui.available_width(), 0.0))
+                        .ui(ui)
+                },
+                &mut self.minecraft_version_dropdown_open,
+            )
+            .max_height(130.0)
+            .desired_width(170.0)
+            .hint_text(RichText::from(t!("gui.ui.search_available_versions")))
+            .ui(ui);
+
+            if !res.hovered() && !res.has_focus() {
+                ui.painter().rect_stroke(
+                    res.rect.expand(ui.visuals().widgets.hovered.expansion),
+                    ui.visuals().widgets.hovered.corner_radius,
+                    ui.visuals().widgets.hovered.bg_stroke,
+                    egui::StrokeKind::Inside,
+                );
+            }
+
             if ui
                 .checkbox(&mut self.show_snapshots, t!("gui.ui.checkbox.snapshots"))
                 .clicked()
@@ -707,21 +726,26 @@ impl eframe::App for App {
             ui.style_mut().interaction.selectable_labels = false;
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
             ui.add_enabled_ui(!self.file_picker_open, |ui| {
-                let mut child =
-                    ui.new_child(UiBuilder::new().layout(Layout::right_to_left(egui::Align::TOP)));
                 ui.vertical_centered(|ui| {
                     ui.heading(t!("gui.ui.title"));
                 });
+                ui.add_space(15.0);
+                let mut child =
+                    ui.new_child(UiBuilder::new().layout(Layout::right_to_left(egui::Align::TOP)));
+                let current = &*rust_i18n::locale();
                 child.horizontal(|ui| {
                     ComboBox::from_id_salt("language")
                         .width(20.0)
-                        .selected_text(&*rust_i18n::locale())
+                        .selected_text(t!(format!("language_name"), locale = current))
                         .show_ui(ui, |ui| {
                             for ele in rust_i18n::available_locales!() {
-                                if ui
-                                    .selectable_label(*ele == *rust_i18n::locale(), ele)
-                                    .clicked()
+                                let mut name = t!(format!("language_name"), locale = ele);
+                                if name == t!(format!("language_name"), locale = "en")
+                                    && ele != "en"
                                 {
+                                    name = std::borrow::Cow::Borrowed(ele);
+                                }
+                                if ui.selectable_label(ele == current, name).clicked() {
                                     rust_i18n::set_locale(ele);
                                 }
                             }
@@ -732,34 +756,37 @@ impl eframe::App for App {
                 if self.installation_task.is_some() {
                     ui.vertical(|ui| {
                         let progress = self.installation_task.as_mut().unwrap();
-                        ui.add_space(15.0);
                         progress.poll();
 
                         ui.label(t!("gui.ui.output"));
-                        let mut rect = ui.cursor();
-                        let mut output_height = ui.available_height() - 44.0;
-                        rect.set_width(ui.available_width());
-                        rect.set_height(output_height);
-                        ui.painter().rect_filled(rect, 8.0, Color32::LIGHT_GRAY);
-                        ui.add_space(4.0);
-                        output_height -= 10.0;
-                        ScrollArea::vertical()
-                            .auto_shrink(Vec2b::FALSE)
-                            .min_scrolled_height(output_height)
-                            .min_scrolled_width(ui.available_width())
-                            .max_height(output_height)
-                            .max_width(ui.available_width())
-                            .stick_to_bottom(true)
+                        let output_height = ui.available_height() - 54.0;
+                        Frame::new()
+                            .inner_margin(Margin {
+                                left: 0,
+                                right: 2,
+                                top: 6,
+                                bottom: 6,
+                            })
+                            .corner_radius(8.0)
+                            .fill(Color32::LIGHT_GRAY)
                             .show(ui, |ui| {
-                                let text = progress.status.join("\n");
-                                TextEdit::multiline(&mut text.as_str())
-                                    .desired_width(ui.available_width())
-                                    .font(FontId::monospace(10.0))
-                                    .return_key(None)
-                                    .cursor_at_end(true)
-                                    .show(ui);
+                                ScrollArea::vertical()
+                                    .auto_shrink(Vec2b::FALSE)
+                                    .min_scrolled_height(output_height)
+                                    .min_scrolled_width(ui.available_width())
+                                    .max_height(output_height)
+                                    .max_width(ui.available_width())
+                                    .stick_to_bottom(true)
+                                    .show(ui, |ui| {
+                                        let text = progress.status.join("\n");
+                                        TextEdit::multiline(&mut text.as_str())
+                                            .desired_width(ui.available_width())
+                                            .font(FontId::monospace(10.0))
+                                            .return_key(None)
+                                            .cursor_at_end(true)
+                                            .show(ui);
+                                    });
                             });
-                        ui.add_space(4.0);
                         ProgressBar::new(progress.last_progress)
                             .desired_width(ui.available_width())
                             .animate(true)
@@ -791,8 +818,6 @@ impl eframe::App for App {
                     return;
                 }
                 ui.vertical(|ui| {
-                    ui.add_space(15.0);
-
                     self.add_environment_options(ui);
 
                     ui.add_space(15.0);
@@ -962,12 +987,16 @@ impl<F: FnMut(&mut Ui, &str) -> Response, V: AsRef<str>, I: Iterator<Item = V>> 
                         {
                             continue;
                         }
+                        let ele_response = display(ui, text);
 
-                        if display(ui, text).clicked() {
+                        if ele_response.clicked() {
                             *buf = text.to_owned();
                             changed = true;
 
                             *open = false;
+                        }
+                        if ele_response.gained_focus() && !ui.is_rect_visible(ele_response.rect) {
+                            ele_response.scroll_to_me(Some(Align::BOTTOM));
                         }
                     }
                 });

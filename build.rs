@@ -39,10 +39,12 @@ fn main() {
         ))
         .arg(":java:assemble")
         .arg("--stacktrace")
+        .arg("--no-daemon")
         .status()
         .expect("Gradle build should succeed");
     }
     println!("cargo::rerun-if-changed=java/build.gradle.kts");
     println!("cargo::rerun-if-changed=java/src");
     println!("cargo::rerun-if-changed=res/windows");
+    println!("cargo::rerun-if-changed=locales/");
 }

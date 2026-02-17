@@ -1,5 +1,6 @@
 {
     "_version": 1,
+    "language_name": "English",
     "gui.ui.title": "Ornithe Installer",
     "gui.ui.language": "Language: ",
     "gui.error.no_available_minecraft_versions":"Could not find any available Minecraft versions. Make sure you are connected to the internet!",

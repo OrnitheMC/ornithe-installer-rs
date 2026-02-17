@@ -1,6 +1,7 @@
 {
     "_version": 1,
-    "gui.ui.title": "Instalace Ornithe",
+    "language_name": "Čeština",
+    "gui.ui.title": "Instalační program Ornithe",
     "gui.ui.language": "Jazyk: ",
     "gui.error.no_available_minecraft_versions":"Nebyli nalezeny žádné dostupné verze Minecraftu. Zkontrolujte zda jste připojeni k internetu!",
     "gui.ui.button.pick_location":"Zvolit umístění",
@@ -29,7 +30,7 @@
     "gui.ui.output_location":"Umístění výstupu",
     "gui.ui.install_location": "Umístění instalace",
     "gui.button.install": "Nainstalovat",
-    "gui.error.generic": "Chyba instlačního programu Ornithe",
+    "gui.error.generic": "Chyba instalačního programu Ornithe",
     "gui.mode.client": "Klient (Oficiální Launcher)",
     "gui.mode.mmc": "MultiMC/PrismLauncher",
     "gui.mode.server": "Server",

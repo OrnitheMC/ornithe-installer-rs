@@ -1,6 +1,6 @@
 {
   "_version": 1,
-  "lang_name": "Italiano",
+  "language_name": "Italiano",
   "gui.ui.title": "Installazione di Ornithe",
   "gui.ui.language": "Lingua: ",
   "gui.error.no_available_minecraft_versions": "Non e' stato possibile trovare alcuna versione di Minecraft. Assicurati di essere connesso ad internet!",
