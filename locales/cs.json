@@ -1,6 +1,6 @@
 {
     "_version": 1,
-    "gui.ui.title": "Instalační program Ornithe",
+    "gui.ui.title": "Instalace Ornithe",
     "gui.ui.language": "Jazyk: ",
     "gui.error.no_available_minecraft_versions":"Nebyli nalezeny žádné dostupné verze Minecraftu. Zkontrolujte zda jste připojeni k internetu!",
     "gui.ui.button.pick_location":"Zvolit umístění",
