@@ -255,6 +255,15 @@ impl App {
     }
 
     fn add_location_picker(&mut self, frame: &mut eframe::Frame, ui: &mut egui::Ui) {
+        ui.label(if self.mode == Mode::MMC && self.generate_zip {
+            if *rust_i18n::locale() == *"fr" && self.detonation_easter_egg {
+                std::borrow::Cow::Borrowed("Emplacement de detonation")
+            } else {
+                t!("gui.ui.output_location")
+            }
+        } else {
+            t!("gui.ui.install_location")
+        });
         let mut line_rect = ui.available_rect_before_wrap();
         line_rect.max.y = ui.cursor().min.y + 25.0;
         line_rect.min.y -= 6.0;
@@ -704,6 +713,90 @@ impl App {
             version = selected_version.id
         )))
     }
+
+    fn add_output(&mut self, ui: &mut egui::Ui) {
+        ui.vertical(|ui| {
+            let progress = self.installation_task.as_mut().unwrap();
+            progress.poll();
+
+            ui.label(t!("gui.ui.output"));
+            let output_height = ui.available_height() - 60.0;
+            Frame::new()
+                .inner_margin(Margin {
+                    left: 0,
+                    right: 2,
+                    top: 6,
+                    bottom: 6,
+                })
+                .corner_radius(8.0)
+                .fill(Color32::LIGHT_GRAY)
+                .show(ui, |ui| {
+                    ScrollArea::vertical()
+                        .auto_shrink(Vec2b::FALSE)
+                        .min_scrolled_height(output_height)
+                        .min_scrolled_width(ui.available_width())
+                        .max_height(output_height)
+                        .max_width(ui.available_width())
+                        .stick_to_bottom(true)
+                        .show(ui, |ui| {
+                            let text = progress.status.join("\n");
+                            TextEdit::multiline(&mut text.as_str())
+                                .desired_width(ui.available_width())
+                                .font(FontId::monospace(10.0))
+                                .return_key(None)
+                                .cursor_at_end(true)
+                                .show(ui);
+                        });
+                });
+            ProgressBar::new(progress.last_progress)
+                .desired_width(ui.available_width())
+                .animate(true)
+                .text(
+                    RichText::new(format!("{}%", (progress.last_progress * 100.0) as i32))
+                        .background_color(Color32::LIGHT_BLUE),
+                )
+                .fill(Color32::LIGHT_BLUE)
+                .ui(ui);
+        });
+        ui.vertical_centered(|ui| {
+            let mut back = Button::new(RichText::new(t!("gui.button.back")).heading());
+            if self
+                .installation_task
+                .as_ref()
+                .and_then(|t| t.task.as_ref())
+                .map(|t| !t.1.is_finished())
+                .unwrap_or(false)
+            {
+                back = back.sense(Sense::empty());
+            }
+            if back.ui(ui).clicked() {
+                self.installation_task = None;
+            }
+        });
+    }
+
+    fn add_language_selector(&mut self, ui: &mut egui::Ui) {
+        let mut child =
+            ui.new_child(UiBuilder::new().layout(Layout::right_to_left(egui::Align::TOP)));
+        let current = &*rust_i18n::locale();
+        child.horizontal(|ui| {
+            ComboBox::from_id_salt("language")
+                .width(20.0)
+                .selected_text(t!(format!("language_name"), locale = current))
+                .show_ui(ui, |ui| {
+                    for ele in rust_i18n::available_locales!() {
+                        let mut name = t!(format!("language_name"), locale = ele);
+                        if name == t!(format!("language_name"), locale = "en") && ele != "en" {
+                            name = std::borrow::Cow::Borrowed(ele);
+                        }
+                        if ui.selectable_label(ele == current, name).clicked() {
+                            rust_i18n::set_locale(ele);
+                        }
+                    }
+                });
+            ui.label(t!("gui.ui.language"));
+        });
+    }
 }
 
 impl eframe::App for App {
@@ -730,93 +823,12 @@ impl eframe::App for App {
                     ui.heading(t!("gui.ui.title"));
                 });
                 ui.add_space(15.0);
-                let mut child =
-                    ui.new_child(UiBuilder::new().layout(Layout::right_to_left(egui::Align::TOP)));
-                let current = &*rust_i18n::locale();
-                child.horizontal(|ui| {
-                    ComboBox::from_id_salt("language")
-                        .width(20.0)
-                        .selected_text(t!(format!("language_name"), locale = current))
-                        .show_ui(ui, |ui| {
-                            for ele in rust_i18n::available_locales!() {
-                                let mut name = t!(format!("language_name"), locale = ele);
-                                if name == t!(format!("language_name"), locale = "en")
-                                    && ele != "en"
-                                {
-                                    name = std::borrow::Cow::Borrowed(ele);
-                                }
-                                if ui.selectable_label(ele == current, name).clicked() {
-                                    rust_i18n::set_locale(ele);
-                                }
-                            }
-                        });
-                    ui.label(t!("gui.ui.language"));
-                });
-
                 if self.installation_task.is_some() {
-                    ui.vertical(|ui| {
-                        let progress = self.installation_task.as_mut().unwrap();
-                        progress.poll();
-
-                        ui.label(t!("gui.ui.output"));
-                        let output_height = ui.available_height() - 54.0;
-                        Frame::new()
-                            .inner_margin(Margin {
-                                left: 0,
-                                right: 2,
-                                top: 6,
-                                bottom: 6,
-                            })
-                            .corner_radius(8.0)
-                            .fill(Color32::LIGHT_GRAY)
-                            .show(ui, |ui| {
-                                ScrollArea::vertical()
-                                    .auto_shrink(Vec2b::FALSE)
-                                    .min_scrolled_height(output_height)
-                                    .min_scrolled_width(ui.available_width())
-                                    .max_height(output_height)
-                                    .max_width(ui.available_width())
-                                    .stick_to_bottom(true)
-                                    .show(ui, |ui| {
-                                        let text = progress.status.join("\n");
-                                        TextEdit::multiline(&mut text.as_str())
-                                            .desired_width(ui.available_width())
-                                            .font(FontId::monospace(10.0))
-                                            .return_key(None)
-                                            .cursor_at_end(true)
-                                            .show(ui);
-                                    });
-                            });
-                        ProgressBar::new(progress.last_progress)
-                            .desired_width(ui.available_width())
-                            .animate(true)
-                            .text(
-                                RichText::new(format!(
-                                    "{}%",
-                                    (progress.last_progress * 100.0) as i32
-                                ))
-                                .background_color(Color32::LIGHT_BLUE),
-                            )
-                            .fill(Color32::LIGHT_BLUE)
-                            .ui(ui);
-                    });
-                    ui.vertical_centered(|ui| {
-                        let mut back = Button::new(RichText::new(t!("gui.button.back")).heading());
-                        if self
-                            .installation_task
-                            .as_ref()
-                            .and_then(|t| t.task.as_ref())
-                            .map(|t| t.1.is_finished())
-                            .unwrap_or(false)
-                        {
-                            back = back.sense(Sense::empty());
-                        }
-                        if back.ui(ui).clicked() {
-                            self.installation_task = None;
-                        }
-                    });
+                    self.add_output(ui);
                     return;
                 }
+                self.add_language_selector(ui);
+
                 ui.vertical(|ui| {
                     self.add_environment_options(ui);
 
@@ -826,15 +838,6 @@ impl eframe::App for App {
                     self.add_loader(ui);
 
                     ui.add_space(15.0);
-                    ui.label(if self.mode == Mode::MMC && self.generate_zip {
-                        if *rust_i18n::locale() == *"fr" && self.detonation_easter_egg {
-                            std::borrow::Cow::Borrowed("Emplacement de detonation")
-                        } else {
-                            t!("gui.ui.output_location")
-                        }
-                    } else {
-                        t!("gui.ui.install_location")
-                    });
                     self.add_location_picker(frame, ui);
                 });
 
