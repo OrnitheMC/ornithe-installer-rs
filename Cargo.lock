@@ -2855,7 +2855,7 @@ dependencies = [
 
 [[package]]
 name = "ornithe-installer-rs"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "arboard",
  "base64",
