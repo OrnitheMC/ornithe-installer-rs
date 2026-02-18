@@ -40,6 +40,13 @@ enum Mode {
 
 pub async fn run() -> Result<(), InstallerError> {
     info!("Starting GUI installer...");
+    if let Ok(locale) = current_locale::current_locale() {
+        rust_i18n::set_locale(&locale);
+        // It is possible that we do not support the preferred language,
+        // in which case rust_i18n falls back to [`en`]. rust_i18n::locale() will still return
+        // whatever was just set.
+        info!("Trying to adjust language to user locale: {}", locale);
+    }
 
     let res = create_window().await;
     if let Err(e) = res {
