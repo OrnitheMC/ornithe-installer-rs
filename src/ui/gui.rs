@@ -74,16 +74,16 @@ fn load_windows_fonts() -> Result<FontData, FontError> {
         r"C:\Windows\Fonts\YuGothM.ttc",
         r"C:\Windows\Fonts\YuGothB.ttc",
         r"C:\Windows\Fonts\YuMincho.ttc",
-        r"C:\Windows\Fonts\msyh.ttc",      // Microsoft YaHei
-        r"C:\Windows\Fonts\msyhbd.ttc",    // Microsoft YaHei Bold
-        r"C:\Windows\Fonts\simsun.ttc",    // SimSun
-        r"C:\Windows\Fonts\simhei.ttf",    // SimHei
-        r"C:\Windows\Fonts\simkai.ttf",    // KaiTi
-        r"C:\Windows\Fonts\simfang.ttf",   // FangSong
-        r"C:\Windows\Fonts\msjh.ttc",      // Microsoft JhengHei (Traditional Chinese)
-        r"C:\Windows\Fonts\msjhbd.ttc",    // Microsoft JhengHei Bold
-        r"C:\Windows\Fonts\kaiu.ttf",      // DFKai-SB (Traditional Chinese)
-        r"C:\Windows\Fonts\mingliu.ttc",   // MingLiU (Traditional Chinese)
+        r"C:\Windows\Fonts\msyh.ttc",
+        r"C:\Windows\Fonts\msyhbd.ttc",
+        r"C:\Windows\Fonts\simsun.ttc",
+        r"C:\Windows\Fonts\simhei.ttf",
+        r"C:\Windows\Fonts\simkai.ttf",
+        r"C:\Windows\Fonts\simfang.ttf",
+        r"C:\Windows\Fonts\msjh.ttc",
+        r"C:\Windows\Fonts\msjhbd.ttc",
+        r"C:\Windows\Fonts\kaiu.ttf",
+        r"C:\Windows\Fonts\mingliu.ttc",
     ];
 
     for font_path in &font_paths {
@@ -102,12 +102,12 @@ fn load_macos_fonts() -> Result<FontData, FontError> {
         "/System/Library/Fonts/ヒラギノ明朝 ProN.ttc",
         "/System/Library/Fonts/ヒラギノ丸ゴ ProN W4.ttc",
         "/Library/Fonts/Arial Unicode.ttf",
-        "/System/Library/Fonts/PingFang.ttc",           // PingFang SC
-        "/System/Library/Fonts/STHeiti Light.ttc",      // STHeiti
+        "/System/Library/Fonts/PingFang.ttc",
+        "/System/Library/Fonts/STHeiti Light.ttc",
         "/System/Library/Fonts/STHeiti Medium.ttc",
-        "/System/Library/Fonts/Hiragino Sans GB.ttc",   // Hiragino Sans GB
-        "/Library/Fonts/Arial Unicode.ttf",             // Arial Unicode MS
-        "/System/Library/Fonts/Apple LiGothic Medium.ttf", // Apple LiGothic (Traditional)
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "/Library/Fonts/Arial Unicode.ttf",
+        "/System/Library/Fonts/Apple LiGothic Medium.ttf",
     ];
 
     for font_path in &font_paths {
@@ -116,15 +116,14 @@ fn load_macos_fonts() -> Result<FontData, FontError> {
         }
     }
 
-    Err(FontError::NotFound("No CJK fonts found on macOS".to_string()))
+    Err(FontError::NotFound("No CJK font found on macOS".to_string()))
 }
 
 #[cfg(target_os = "linux")]
 fn load_linux_fonts() -> Result<FontData, FontError> {
     use fontconfig::Fontconfig;
 
-    // fontconfig でシステムから日本語フォントを検索
-    let japanese_families = [
+    let cjk_families = [
         "Noto Sans CJK JP",
         "Noto Sans CJK SC",
         "Noto Sans CJK TC",
@@ -132,14 +131,14 @@ fn load_linux_fonts() -> Result<FontData, FontError> {
         "IPAGothic",
         "IPA Gothic",
         "VL Gothic",
-        "WenQuanYi Micro Hei",  // CJK fallback
+        "WenQuanYi Micro Hei",
         "WenQuanYi Zen Hei",
         "AR PL UMing CN",
         "AR PL UKai CN",
     ];
 
     if let Some(fc) = Fontconfig::new() {
-        for family in &japanese_families {
+        for family in &cjk_families {
             if let Some(font) = fc.find(family, None) {
                 if let Ok(data) = std::fs::read(&font.path) {
             return Ok(FontData::from_owned(data));
@@ -148,7 +147,7 @@ fn load_linux_fonts() -> Result<FontData, FontError> {
         }
     }
 
-    Err(FontError::NotFound("No Japanese font found on Linux".to_string()))
+    Err(FontError::NotFound("No CJK font found on Linux".to_string()))
 }
 
 fn setup_fonts(ctx: &egui::Context) {
