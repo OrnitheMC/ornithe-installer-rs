@@ -4,7 +4,6 @@ use std::{
     hash::Hash,
     path::Path,
     sync::mpsc::{Receiver, Sender},
-    sync::Arc,
 };
 
 use egui::{
