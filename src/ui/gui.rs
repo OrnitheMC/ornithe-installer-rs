@@ -3,11 +3,12 @@ use std::{
     fmt::Display,
     path::Path,
     sync::mpsc::{Receiver, Sender},
+    sync::Arc,
 };
 
 use egui::{
     Align, Button, Checkbox, Color32, ComboBox, FontId, Frame, Layout, Margin, ProgressBar,
-    RichText, Sense, Theme, UiBuilder, Vec2, Vec2b,
+    RichText, Sense, Theme, UiBuilder, Vec2, Vec2b, FontData, FontDefinitions, FontFamily,
 };
 use log::{error, info};
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
@@ -36,6 +37,31 @@ enum Mode {
     Client,
     Server,
     MMC,
+}
+
+fn setup_japanese_font(ctx: &egui::Context) {
+    let mut fonts = FontDefinitions::default();
+
+    fonts.font_data.insert(
+        "japanese".to_owned(),
+        Arc::new(FontData::from_static(include_bytes!(
+            "../fonts/NotoSansJP-Regular.ttf"
+        ))),
+    );
+
+    fonts
+        .families
+        .entry(FontFamily::Proportional)
+        .or_default()
+        .push("japanese".to_owned());
+
+    fonts
+        .families
+        .entry(FontFamily::Monospace)
+        .or_default()
+        .push("japanese".to_owned());
+
+    ctx.set_fonts(fonts);
 }
 
 pub async fn run() -> Result<(), InstallerError> {
@@ -80,7 +106,10 @@ async fn create_window() -> Result<(), InstallerError> {
     eframe::run_native(
         &("Ornithe Installer ".to_owned() + crate::VERSION),
         options,
-        Box::new(|_cc| Ok(Box::new(app))),
+    Box::new(|cc| {
+        setup_japanese_font(&cc.egui_ctx);
+        Ok(Box::new(app))
+    }),
     )?;
     Ok(())
 }
