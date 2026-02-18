@@ -1,15 +1,20 @@
 use std::{
     collections::HashMap,
     fmt::Display,
+    hash::Hash,
     path::Path,
     sync::mpsc::{Receiver, Sender},
     sync::Arc,
 };
 
 use egui::{
-    Align, Button, Checkbox, Color32, ComboBox, FontId, Frame, Layout, Margin, ProgressBar,
-    RichText, Sense, Theme, UiBuilder, Vec2, Vec2b, FontData, FontDefinitions, FontFamily,
+    epaint::text::{FontInsert, InsertFontFamily},
+    text::{CCursor, CCursorRange},
+    Align, Button, Checkbox, Color32, ComboBox, FontData, FontId, Frame, Id, Layout, Margin,
+    ProgressBar, Response, RichText, ScrollArea, Sense, TextEdit, Theme, Ui, UiBuilder, Vec2,
+    Vec2b, Widget, WidgetText,
 };
+
 use log::{error, info};
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
 use tokio::{
@@ -25,13 +30,6 @@ use crate::{
         meta::{IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
-
-use egui::{
-    Id, Response, ScrollArea, TextEdit, Ui, Widget, WidgetText,
-    text::{CCursor, CCursorRange},
-};
-use std::hash::Hash;
-
 #[derive(PartialEq, Clone, Copy, Debug)]
 enum Mode {
     Client,
@@ -39,29 +37,122 @@ enum Mode {
     MMC,
 }
 
+#[derive(Debug)]
+enum FontError {
+    NotFound(String),
+    UnsupportedPlatform,
+}
+
+fn load_japanese_font() -> Result<FontData, FontError> {
+    #[cfg(target_os = "windows")]
+    {
+        load_windows_japanese_font()
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        load_macos_japanese_font()
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        load_linux_japanese_font()
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        Err(FontError::UnsupportedPlatform)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn load_windows_japanese_font() -> Result<FontData, FontError> {
+    let font_paths = [
+        r"C:\Windows\Fonts\meiryo.ttc",
+        r"C:\Windows\Fonts\meiryob.ttc",
+        r"C:\Windows\Fonts\msgothic.ttc",
+        r"C:\Windows\Fonts\msmincho.ttc",
+        r"C:\Windows\Fonts\YuGothM.ttc",
+        r"C:\Windows\Fonts\YuGothB.ttc",
+        r"C:\Windows\Fonts\YuMincho.ttc",
+    ];
+
+    for font_path in &font_paths {
+        if let Ok(data) = std::fs::read(font_path) {
+            return Ok(FontData::from_owned(data));
+        }
+    }
+
+    Err(FontError::NotFound("No Japanese font found on Windows".to_string()))
+}
+
+#[cfg(target_os = "macos")]
+fn load_macos_japanese_font() -> Result<FontData, FontError> {
+    let font_paths = [
+        "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+        "/System/Library/Fonts/ヒラギノ明朝 ProN.ttc",
+        "/System/Library/Fonts/ヒラギノ丸ゴ ProN W4.ttc",
+        "/Library/Fonts/Arial Unicode.ttf",
+    ];
+
+    for font_path in &font_paths {
+        if let Ok(data) = std::fs::read(font_path) {
+            return Ok(FontData::from_owned(data));
+        }
+    }
+
+    Err(FontError::NotFound("No Japanese font found on macOS".to_string()))
+}
+
+#[cfg(target_os = "linux")]
+fn load_linux_japanese_font() -> Result<FontData, FontError> {
+    use fontconfig::Fontconfig;
+
+    // fontconfig でシステムから日本語フォントを検索
+    let japanese_families = [
+        "Noto Sans CJK JP",
+        "Noto Sans JP",
+        "IPAGothic",
+        "IPA Gothic",
+        "VL Gothic",
+        "WenQuanYi Micro Hei",  // CJK fallback
+    ];
+
+    if let Some(fc) = Fontconfig::new() {
+        for family in &japanese_families {
+            if let Some(font) = fc.find(family, None) {
+                if let Ok(data) = std::fs::read(&font.path) {
+                    return Ok(FontData::from_owned(data));
+                }
+            }
+        }
+    }
+
+    Err(FontError::NotFound("No Japanese font found on Linux".to_string()))
+}
+
 fn setup_japanese_font(ctx: &egui::Context) {
-    let mut fonts = FontDefinitions::default();
-
-    fonts.font_data.insert(
-        "japanese".to_owned(),
-        Arc::new(FontData::from_static(include_bytes!(
-            "../fonts/NotoSansJP-Regular.ttf"
-        ))),
-    );
-
-    fonts
-        .families
-        .entry(FontFamily::Proportional)
-        .or_default()
-        .push("japanese".to_owned());
-
-    fonts
-        .families
-        .entry(FontFamily::Monospace)
-        .or_default()
-        .push("japanese".to_owned());
-
-    ctx.set_fonts(fonts);
+    match load_japanese_font() {
+        Ok(font_data) => {
+            ctx.add_font(FontInsert {
+                name: "japanese".into(),
+                data: font_data,
+                families: vec![
+                    InsertFontFamily {
+                        family: egui::FontFamily::Proportional,
+                        priority: egui::epaint::text::FontPriority::Highest,
+                    },
+                    InsertFontFamily {
+                        family: egui::FontFamily::Monospace,
+                        priority: egui::epaint::text::FontPriority::Lowest,
+                    },
+                ],
+            });
+        }
+        Err(e) => {
+            eprintln!("Warning: Failed to load Japanese font: {:?}", e);
+        }
+    }
 }
 
 pub async fn run() -> Result<(), InstallerError> {

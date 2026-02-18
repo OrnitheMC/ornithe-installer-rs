@@ -39,3 +39,6 @@ winres = "0.1.11"
 [profile.release]
 lto = true
 opt-level = 's'
+
+[target.'cfg(target_os = "linux")'.dependencies]
+fontconfig = "0.10.0"
