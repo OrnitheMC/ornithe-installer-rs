@@ -31,8 +31,6 @@ use egui::{
 };
 use std::hash::Hash;
 
-use egui_chinese_font::setup_only_chinese_fonts;
-
 #[derive(PartialEq, Clone, Copy, Debug)]
 enum Mode {
     Client,
@@ -82,13 +80,7 @@ async fn create_window() -> Result<(), InstallerError> {
     eframe::run_native(
         &("Ornithe Installer ".to_owned() + crate::VERSION),
         options,
-        Box::new(|_cc| {
-            // setup chinese font
-            // only replace font for chinese char
-            setup_only_chinese_fonts(&_cc.egui_ctx).expect("Failed to load Chinese fonts");
-
-            Ok(Box::new(app))
-        }),
+        Box::new(|_cc| Ok(Box::new(app))),
     )?;
     Ok(())
 }

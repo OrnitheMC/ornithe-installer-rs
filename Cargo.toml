@@ -14,7 +14,6 @@ clap = { version = "4.5.35", features = ["cargo", "derive", "string"] }
 current_locale = { version = "0.1.1", optional = true }
 eframe = { version = "0.33.2", features = ["wgpu"], optional = true }
 egui = { version = "0.33.2", optional = true }
-egui-chinese-font = { git = "https://github.com/CrazyHPi/egui-chinese-font.git", tag = "v0.2.1" }
 env_logger = "0.11.8"
 indicatif = { version = "0.18.3", features = ["improved_unicode"] }
 log = "0.4.27"
