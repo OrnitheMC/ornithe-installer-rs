@@ -7,10 +7,14 @@ use std::collections::HashMap;
 
 const FONT_LIST: &str = include_str!("../../res/font/fonts.json");
 
+#[allow(dead_code)]
 const WINDOWS_FONT_PATH: &str = r"C:\Windows\Fonts\";
+#[allow(dead_code)]
 const MACOS_FONT_PATH: &str = "/System/Library/Fonts/";
+#[allow(dead_code)]
 const MACOS_FONT_PATH_SHARED: &str = "/Library/Fonts/";
 
+#[allow(dead_code)]
 #[derive(Deserialize)]
 struct SystemFontList {
     windows: PlatformFonts,
