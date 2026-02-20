@@ -4,6 +4,7 @@ pub mod cli;
 
 #[cfg(feature = "gui")]
 pub mod gui;
+mod font_loader;
 
 fn home_dir() -> Option<PathBuf> {
     #[allow(deprecated)]

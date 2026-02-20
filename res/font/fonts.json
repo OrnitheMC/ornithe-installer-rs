@@ -1,0 +1,32 @@
+{
+  "windows": {
+    "zh-CN": [
+      "msyh.ttc",
+      "msyhbd.ttc"
+    ],
+    "ja": [
+      "meiryo.ttc",
+      "msgothic.ttc"
+    ]
+  },
+  "linux": {
+    "zh-CN": [
+      "Noto Sans CJK SC",
+      "WenQuanYi Micro Hei"
+    ],
+    "ja": [
+      "Noto Sans CJK JP",
+      "IPAGothic"
+    ]
+  },
+  "macos": {
+    "zh-CN": [
+      "PingFang.ttc",
+      "Hiragino Sans GB.ttc"
+    ],
+    "ja": [
+      "ヒラギノ角ゴシック W3.ttc",
+      "Hiragino Sans GB.ttc"
+    ]
+  }
+}
