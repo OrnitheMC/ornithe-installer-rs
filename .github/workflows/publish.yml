@@ -40,7 +40,7 @@ jobs:
         build: [linux-x86_64, windows-x86, windows-x86_64, windows-aarch64]
         include:
           - build: linux-x86_64
-            os: ubuntu-latest
+            os: ubuntu-22.04 # GLIBC version!
             target: x86_64-unknown-linux-gnu
           - build: windows-x86
             os: windows-latest
@@ -206,7 +206,7 @@ jobs:
         include:
           - build: linux-aarch64
             target: aarch64-unknown-linux-gnu
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 # GLIBC version!
     steps:
       - uses: actions/checkout@v4
       - name: "Setup Java"
