@@ -4,7 +4,7 @@
     "gui.ui.title": "Ornithe Installer",
     "gui.ui.language": "Sprache: ",
     "gui.error.no_available_minecraft_versions":"Keine verfügbaren Minecraft-Versionen konnten gefunden werden. Überprüfe deine Internetverbindung!",
-    "gui.ui.button.pick_location":"Ort Auswählen",
+    "gui.ui.button.pick_location":"Zielort Auswählen",
     "gui.ui.environment":"Installationsziel",
     "gui.ui.minecraft_version":"Minecraft-Version",
     "gui.ui.search_available_versions":"Versionen durchsuchen...",

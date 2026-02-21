@@ -1,13 +1,16 @@
 use std::{
     collections::HashMap,
     fmt::Display,
+    hash::Hash,
     path::Path,
     sync::mpsc::{Receiver, Sender},
 };
 
 use egui::{
-    Align, Button, Checkbox, Color32, ComboBox, FontId, Frame, Layout, Margin, ProgressBar,
-    RichText, Sense, Theme, UiBuilder, Vec2, Vec2b,
+    Align, Button, Checkbox, Color32, ComboBox, FontId, Frame, Id, Layout, Margin, ProgressBar,
+    Response, RichText, ScrollArea, Sense, TextEdit, Theme, Ui, UiBuilder, Vec2, Vec2b, Widget,
+    WidgetText,
+    text::{CCursor, CCursorRange},
 };
 use log::{error, info};
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
@@ -23,15 +26,8 @@ use crate::{
         manifest::MinecraftVersion,
         meta::{IntermediaryVersion, LoaderType, LoaderVersion},
     },
+    ui::font_loader::load_system_font_to_egui,
 };
-
-use egui::{
-    Id, Response, ScrollArea, TextEdit, Ui, Widget, WidgetText,
-    text::{CCursor, CCursorRange},
-};
-use std::hash::Hash;
-
-use crate::ui::font_loader::load_system_font_to_egui;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 enum Mode {
@@ -338,7 +334,7 @@ impl App {
         child.horizontal_centered(|ui| {
             ui.spacing_mut().icon_width -= 4.0;
             let mut clicked = false;
-            let width = line_rect.width() / 2.0;
+            let width = line_rect.width() / 2.5;
             let prev_mode = self.mode;
             ui.scope(|ui| {
                 ui.set_max_width(width);
@@ -456,6 +452,7 @@ impl App {
         ui.add_space(20.0);
         child.horizontal_centered(|ui| {
             let loader_type_response = ComboBox::from_id_salt("loader_type")
+                .height(130.0)
                 .selected_text(t!(
                     "gui.ui.selection.loader.name",
                     name = &self.selected_loader_type.get_localized_name()
@@ -487,6 +484,7 @@ impl App {
 
             ui.label(t!("gui.ui.loader_version"));
             ComboBox::from_id_salt("loader_version")
+                .height(130.0)
                 .selected_text(format!("{}", &self.selected_loader_version))
                 .show_ui(ui, |ui| {
                     for ele in self
@@ -795,6 +793,7 @@ impl App {
         let current = &*rust_i18n::locale();
         child.horizontal(|ui| {
             ComboBox::from_id_salt("language")
+                .height(130.0)
                 .width(20.0)
                 .selected_text(t!(format!("language_name"), locale = current))
                 .show_ui(ui, |ui| {

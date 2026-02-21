@@ -1,10 +1,11 @@
-use egui::FontData;
-use egui::FontFamily::{Monospace, Proportional};
-use egui::epaint::text::FontPriority::Lowest;
-use egui::epaint::text::{FontInsert, InsertFontFamily};
+use egui::{
+    FontData,
+    FontFamily::{Monospace, Proportional},
+    epaint::text::{FontInsert, FontPriority::Lowest, InsertFontFamily},
+};
+use log::warn;
 use serde::Deserialize;
 use std::collections::HashMap;
-use log::warn;
 
 const FONT_LIST: &str = include_str!("../../res/font/fonts.json");
 
