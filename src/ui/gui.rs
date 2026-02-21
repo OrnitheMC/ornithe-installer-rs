@@ -1,19 +1,14 @@
 use std::{
     collections::HashMap,
     fmt::Display,
-    hash::Hash,
     path::Path,
     sync::mpsc::{Receiver, Sender},
 };
 
 use egui::{
-    epaint::text::{FontInsert, InsertFontFamily},
-    text::{CCursor, CCursorRange},
-    Align, Button, Checkbox, Color32, ComboBox, FontData, FontId, Frame, Id, Layout, Margin,
-    ProgressBar, Response, RichText, ScrollArea, Sense, TextEdit, Theme, Ui, UiBuilder, Vec2,
-    Vec2b, Widget, WidgetText,
+    Align, Button, Checkbox, Color32, ComboBox, FontId, Frame, Layout, Margin, ProgressBar,
+    RichText, Sense, Theme, UiBuilder, Vec2, Vec2b,
 };
-
 use log::{error, info};
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
 use tokio::{
@@ -29,167 +24,19 @@ use crate::{
         meta::{IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
+
+use egui::{
+    Id, Response, ScrollArea, TextEdit, Ui, Widget, WidgetText,
+    text::{CCursor, CCursorRange},
+};
+use std::hash::Hash;
+
 #[derive(PartialEq, Clone, Copy, Debug)]
 enum Mode {
     Client,
     Server,
     MMC,
 }
-
-#[derive(Debug)]
-enum FontError {
-    NotFound(String),
-    UnsupportedPlatform,
-}
-
-fn load_fonts() -> Result<FontData, FontError> {
-    #[cfg(target_os = "windows")]
-    {
-        load_windows_fonts()
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        load_macos_fonts()
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        load_linux_fonts()
-    }
-
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    {
-        Err(FontError::UnsupportedPlatform)
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn load_windows_fonts() -> Result<FontData, FontError> {
-    let font_paths = [
-        r"C:\Windows\Fonts\meiryo.ttc",
-        r"C:\Windows\Fonts\meiryob.ttc",
-        r"C:\Windows\Fonts\msgothic.ttc",
-        r"C:\Windows\Fonts\msmincho.ttc",
-        r"C:\Windows\Fonts\YuGothM.ttc",
-        r"C:\Windows\Fonts\YuGothB.ttc",
-        r"C:\Windows\Fonts\YuMincho.ttc",
-        r"C:\Windows\Fonts\msyh.ttc",
-        r"C:\Windows\Fonts\msyhbd.ttc",
-        r"C:\Windows\Fonts\simsun.ttc",
-        r"C:\Windows\Fonts\simhei.ttf",
-        r"C:\Windows\Fonts\simkai.ttf",
-        r"C:\Windows\Fonts\simfang.ttf",
-        r"C:\Windows\Fonts\msjh.ttc",
-        r"C:\Windows\Fonts\msjhbd.ttc",
-        r"C:\Windows\Fonts\kaiu.ttf",
-        r"C:\Windows\Fonts\mingliu.ttc",
-    ];
-
-    for font_path in &font_paths {
-        if let Ok(data) = std::fs::read(font_path) {
-            return Ok(FontData::from_owned(data));
-        }
-    }
-
-    Err(FontError::NotFound("No CJK font found on Windows".to_string()))
-}
-
-#[cfg(target_os = "macos")]
-fn load_macos_fonts() -> Result<FontData, FontError> {
-    let font_paths = [
-        "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
-        "/System/Library/Fonts/ヒラギノ明朝 ProN.ttc",
-        "/System/Library/Fonts/ヒラギノ丸ゴ ProN W4.ttc",
-        "/Library/Fonts/Arial Unicode.ttf",
-        "/System/Library/Fonts/PingFang.ttc",
-        "/System/Library/Fonts/STHeiti Light.ttc",
-        "/System/Library/Fonts/STHeiti Medium.ttc",
-        "/System/Library/Fonts/Hiragino Sans GB.ttc",
-        "/Library/Fonts/Arial Unicode.ttf",
-        "/System/Library/Fonts/Apple LiGothic Medium.ttf",
-    ];
-
-    for font_path in &font_paths {
-        if let Ok(data) = std::fs::read(font_path) {
-            return Ok(FontData::from_owned(data));
-        }
-    }
-
-    Err(FontError::NotFound("No CJK font found on macOS".to_string()))
-}
-
-#[cfg(target_os = "linux")]
-fn load_linux_fonts() -> Result<FontData, FontError> {
-    use fontconfig::Fontconfig;
-
-    let cjk_families = [
-        "Noto Sans CJK JP",
-        "Noto Sans CJK SC",
-        "Noto Sans CJK TC",
-        "Noto Sans JP",
-        "IPAGothic",
-        "IPA Gothic",
-        "VL Gothic",
-        "WenQuanYi Micro Hei",
-        "WenQuanYi Zen Hei",
-        "AR PL UMing CN",
-        "AR PL UKai CN",
-    ];
-
-    if let Some(fc) = Fontconfig::new() {
-        for family in &cjk_families {
-            if let Some(font) = fc.find(family, None) {
-                if let Ok(data) = std::fs::read(&font.path) {
-            return Ok(FontData::from_owned(data));
-                }
-            }
-        }
-    }
-
-    Err(FontError::NotFound("No CJK font found on Linux".to_string()))
-}
-
-fn setup_fonts(ctx: &egui::Context) {
-    match load_fonts() {
-        Ok(font_data) => {
-            // Japanese font
-            ctx.add_font(FontInsert {
-                name: "japanese".into(),
-                data: font_data.clone(),
-                families: vec![
-                    InsertFontFamily {
-                        family: egui::FontFamily::Proportional,
-                        priority: egui::epaint::text::FontPriority::Highest,
-                    },
-                    InsertFontFamily {
-                        family: egui::FontFamily::Monospace,
-                        priority: egui::epaint::text::FontPriority::Lowest,
-                    },
-                ],
-            });
-            // Chinese font
-            ctx.add_font(FontInsert {
-                name: "chinese".into(),
-                data: font_data,
-                families: vec![
-                    InsertFontFamily {
-                        family: egui::FontFamily::Proportional,
-                        priority: egui::epaint::text::FontPriority::Lowest,
-                    },
-                    InsertFontFamily {
-                        family: egui::FontFamily::Monospace,
-                        priority: egui::epaint::text::FontPriority::Lowest,
-                    },
-                ],
-            });
-        }
-        Err(e) => {
-            eprintln!("Warning: Failed to load fonts: {:?}", e);
-        }
-    }
-}
-
 
 pub async fn run() -> Result<(), InstallerError> {
     info!("Starting GUI installer...");
@@ -233,10 +80,7 @@ async fn create_window() -> Result<(), InstallerError> {
     eframe::run_native(
         &("Ornithe Installer ".to_owned() + crate::VERSION),
         options,
-    Box::new(|cc| {
-        setup_fonts(&cc.egui_ctx);
-        Ok(Box::new(app))
-    }),
+        Box::new(|_cc| Ok(Box::new(app))),
     )?;
     Ok(())
 }
@@ -439,7 +283,7 @@ impl App {
             });
             if !res.hovered() && !res.has_focus() {
                 ui.painter().rect_stroke(
-            res.rect.expand(ui.visuals().widgets.hovered.expansion),
+                    res.rect.expand(ui.visuals().widgets.hovered.expansion),
                     ui.visuals().widgets.hovered.corner_radius,
                     ui.visuals().widgets.hovered.bg_stroke,
                     egui::StrokeKind::Inside,
@@ -539,7 +383,7 @@ impl App {
 
             if !res.hovered() && !res.has_focus() {
                 ui.painter().rect_stroke(
-            res.rect.expand(ui.visuals().widgets.hovered.expansion),
+                    res.rect.expand(ui.visuals().widgets.hovered.expansion),
                     ui.visuals().widgets.hovered.corner_radius,
                     ui.visuals().widgets.hovered.bg_stroke,
                     egui::StrokeKind::Inside,
@@ -576,7 +420,7 @@ impl App {
             })
             .filter(|v| {
                 if self.show_snapshots && self.show_historical {
-            return true;
+                    return true;
                 }
                 let mut displayed = v.is_release();
                 if !displayed && self.show_snapshots {
@@ -704,7 +548,7 @@ impl App {
                             Ok(v) => v,
                             Err(e) => {
                                 display_dialog(t!("gui.error.installation_failed"), &e.0);
-                        return;
+                                return;
                             }
                         };
                     let handle = tokio::spawn(crate::actions::client::install(
@@ -728,11 +572,11 @@ impl App {
                             Ok(v) => v,
                             Err(e) => {
                                 display_dialog(t!("gui.error.installation_failed"), e.0);
-                        return;
+                                return;
                             }
                         };
                     self.installation_task = Some(InstallationProgress::new((
-                receiver,
+                        receiver,
                         tokio::spawn(crate::actions::server::install(
                             sender,
                             selected_version,
@@ -755,7 +599,7 @@ impl App {
                             Ok(v) => v,
                             Err(e) => {
                                 display_dialog(t!("gui.error.installation_failed"), e.0);
-                        return;
+                                return;
                             }
                         };
                     let handle = tokio::spawn(crate::actions::mmc_pack::install(
@@ -887,7 +731,7 @@ impl App {
             Frame::new()
                 .inner_margin(Margin {
                     left: 0,
-            right: 2,
+                    right: 2,
                     top: 6,
                     bottom: 6,
                 })
@@ -915,7 +759,7 @@ impl App {
                 .desired_width(ui.available_width())
                 .animate(true)
                 .text(
-            RichText::new(format!("{}%", (progress.last_progress * 100.0) as i32))
+                    RichText::new(format!("{}%", (progress.last_progress * 100.0) as i32))
                         .background_color(Color32::LIGHT_BLUE),
                 )
                 .fill(Color32::LIGHT_BLUE)
@@ -953,7 +797,7 @@ impl App {
                             name = std::borrow::Cow::Borrowed(ele);
                         }
                         if ui.selectable_label(ele == current, name).clicked() {
-                    rust_i18n::set_locale(ele);
+                            rust_i18n::set_locale(ele);
                         }
                     }
                 });
@@ -988,7 +832,7 @@ impl eframe::App for App {
                 ui.add_space(15.0);
                 if self.installation_task.is_some() {
                     self.add_output(ui);
-            return;
+                    return;
                 }
                 self.add_language_selector(ui);
 
