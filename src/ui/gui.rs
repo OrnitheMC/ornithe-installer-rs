@@ -9,7 +9,7 @@ use egui::{
     Align, Button, Checkbox, Color32, ComboBox, FontId, Frame, Layout, Margin, ProgressBar,
     RichText, Sense, Theme, UiBuilder, Vec2, Vec2b,
 };
-use log::{error, info};
+use log::{error, info, warn};
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
 use tokio::{
     sync::mpsc::{UnboundedReceiver, unbounded_channel},
@@ -84,7 +84,7 @@ async fn create_window() -> Result<(), InstallerError> {
         options,
         Box::new(|_cc| {
             // load needed system fonts
-            load_system_font_to_egui(&_cc.egui_ctx).expect("Error loading system font");
+            load_system_font_to_egui(&_cc.egui_ctx);
 
             Ok(Box::new(app))
         }),
