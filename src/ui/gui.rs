@@ -9,7 +9,7 @@ use egui::{
     Align, Button, Checkbox, Color32, ComboBox, FontId, Frame, Layout, Margin, ProgressBar,
     RichText, Sense, Theme, UiBuilder, Vec2, Vec2b,
 };
-use log::{error, info, warn};
+use log::{error, info};
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
 use tokio::{
     sync::mpsc::{UnboundedReceiver, unbounded_channel},

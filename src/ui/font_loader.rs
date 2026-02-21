@@ -8,14 +8,20 @@ use log::warn;
 
 const FONT_LIST: &str = include_str!("../../res/font/fonts.json");
 
+#[cfg(target_os = "windows")]
 const WINDOWS_FONT_PATH: &str = r"C:\Windows\Fonts\";
+#[cfg(target_os = "macos")]
 const MACOS_FONT_PATH: &str = "/System/Library/Fonts/";
+#[cfg(target_os = "macos")]
 const MACOS_FONT_PATH_SHARED: &str = "/Library/Fonts/";
 
 #[derive(Deserialize)]
 struct SystemFontList {
+    #[cfg(target_os = "windows")]
     windows: PlatformFonts,
+    #[cfg(target_os = "linux")]
     linux: PlatformFonts,
+    #[cfg(target_os = "macos")]
     macos: PlatformFonts,
 }
 
@@ -78,6 +84,7 @@ fn find_system_font() -> HashMap<String, FontData> {
     result
 }
 
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn load_fonts_from_paths(
     platform_fonts: &PlatformFonts,
     search_paths: &[&str],
