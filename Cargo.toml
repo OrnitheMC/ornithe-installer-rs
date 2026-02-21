@@ -27,10 +27,13 @@ tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
 webbrowser = { version = "1.0.4", optional = true }
 zip = { version = "7.2.0", features = ["deflate-flate2"], default-features = false }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+fontconfig = { version = "0.10.0", optional = true }
+
 [features]
 default = ["gui"]
 
-gui = ["dep:eframe", "dep:egui", "dep:rfd", "dep:webbrowser", "dep:rand", "dep:current_locale"]
+gui = ["dep:eframe", "dep:egui", "dep:rfd", "dep:webbrowser", "dep:rand", "dep:current_locale", "dep:fontconfig"]
 
 [build-dependencies]
 embed-resource = "3.0.5"

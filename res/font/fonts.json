@@ -1,0 +1,56 @@
+{
+  "windows": {
+    "zh-CN": [
+      "msyh.ttc",
+      "msyhbd.ttc",
+      "simsun.ttc",
+      "simhei.ttf",
+      "simkai.ttf",
+      "simfang.ttf",
+      "msjh.ttc",
+      "msjhbd.ttc"
+    ],
+    "ja": [
+      "meiryo.ttc",
+      "meiryob.ttc",
+      "msgothic.ttc",
+      "msmincho.ttc",
+      "YuGothM.ttc",
+      "YuGothB.ttc",
+      "YuMincho.ttc"
+    ]
+  },
+  "linux": {
+    "zh-CN": [
+      "Noto Sans CJK SC",
+      "WenQuanYi Micro Hei",
+      "WenQuanYi Zen Hei",
+      "AR PL UMing CN",
+      "AR PL UKai CN"
+    ],
+    "ja": [
+      "Noto Sans CJK JP",
+      "Noto Sans CJK SC",
+      "Noto Sans CJK TC",
+      "Noto Sans JP",
+      "IPAGothic",
+      "IPA Gothic",
+      "VL Gothic"
+    ]
+  },
+  "macos": {
+    "zh-CN": [
+      "PingFang.ttc",
+      "STHeiti Light.ttc",
+      "STHeiti Medium.ttc",
+      "Hiragino Sans GB.ttc",
+      "Arial Unicode.ttf"
+    ],
+    "ja": [
+      "ヒラギノ角ゴシック W3.ttc",
+      "ヒラギノ明朝 ProN.ttc",
+      "ヒラギノ丸ゴ ProN W4.ttc",
+      "Hiragino Sans GB.ttc"
+    ]
+  }
+}

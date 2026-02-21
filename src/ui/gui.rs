@@ -31,6 +31,8 @@ use egui::{
 };
 use std::hash::Hash;
 
+use crate::ui::font_loader::load_system_font_to_egui;
+
 #[derive(PartialEq, Clone, Copy, Debug)]
 enum Mode {
     Client,
@@ -80,7 +82,12 @@ async fn create_window() -> Result<(), InstallerError> {
     eframe::run_native(
         &("Ornithe Installer ".to_owned() + crate::VERSION),
         options,
-        Box::new(|_cc| Ok(Box::new(app))),
+        Box::new(|_cc| {
+            // load needed system fonts
+            load_system_font_to_egui(&_cc.egui_ctx);
+
+            Ok(Box::new(app))
+        }),
     )?;
     Ok(())
 }

@@ -5,6 +5,9 @@ pub mod cli;
 #[cfg(feature = "gui")]
 pub mod gui;
 
+#[cfg(feature = "gui")]
+mod font_loader;
+
 fn home_dir() -> Option<PathBuf> {
     #[allow(deprecated)]
     std::env::home_dir()
