@@ -223,6 +223,7 @@ async fn do_install(
             info.calamus_generation,
             location,
             create_profile,
+            !matches.get_flag("exclude-flap"),
         )
         .await?;
         return Ok(InstallationResult::Installed);
@@ -249,6 +250,7 @@ async fn do_install(
                 loader_version,
                 info.calamus_generation,
                 location,
+                !matches.get_flag("exclude-flap"),
                 java,
                 run_args.map(|s| s.split(" ")),
             )
@@ -267,6 +269,7 @@ async fn do_install(
             info.calamus_generation,
             location,
             matches.get_flag("download-minecraft"),
+            !matches.get_flag("exclude-flap"),
         )
         .await?;
         return Ok(InstallationResult::Installed);
@@ -296,6 +299,7 @@ async fn do_install(
             copy_profile_path,
             generate_zip,
             info.calamus_generation,
+            !matches.get_flag("exclude-flap"),
         )
         .await?;
         return Ok(InstallationResult::Installed);
@@ -417,6 +421,7 @@ fn add_arguments(command: Command) -> Command {
                 .value_parser(["fabric", "quilt"]),
         )
         .arg(arg!(--"loader-version" <VERSION> "Loader version to use").default_value("latest"))
+        .arg(arg!(--"exclude-flap" "Do not include Flap (Cross-Intermediary Generation Remapper)"))
 }
 
 fn add_gen_argument(command: Command) -> Command {

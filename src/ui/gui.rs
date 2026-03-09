@@ -142,6 +142,7 @@ struct App {
     file_picker_open: bool,
     minecraft_version_dropdown_open: bool,
     detonation_easter_egg: bool,
+    include_flap: bool,
 }
 
 pub struct InstallationProgress {
@@ -211,7 +212,7 @@ impl App {
         }
         if available_minecraft_versions.len() == 0 {
             return Err(InstallerError::from(t!(
-                "error.no_available_minecraft_versions"
+                "gui.error.no_available_minecraft_versions"
             )));
         }
         info!(
@@ -259,6 +260,7 @@ impl App {
             installation_task: None,
             minecraft_version_dropdown_open: false,
             detonation_easter_egg: rand::random_bool(0.001),
+            include_flap: true,
         };
         app.filter_minecraft_versions();
         Ok(app)
@@ -542,6 +544,7 @@ impl App {
                 .find(|v| v.version == self.selected_loader_version)
                 .unwrap()
                 .clone();
+            let include_flap = self.include_flap;
             let (sender, receiver) = unbounded_channel();
             match self.mode {
                 Mode::Client => {
@@ -565,6 +568,7 @@ impl App {
                         None,
                         location,
                         create_profile,
+                        include_flap,
                     ));
                     self.installation_task = Some(InstallationProgress::new((receiver, handle)));
                 }
@@ -591,6 +595,7 @@ impl App {
                             None,
                             location,
                             download_server,
+                            include_flap,
                         )),
                     )));
                 }
@@ -617,6 +622,7 @@ impl App {
                         copy_profile_path,
                         generate_zip,
                         None,
+                        include_flap,
                     ));
                     self.installation_task = Some(InstallationProgress::new((receiver, handle)));
                 }
@@ -676,29 +682,40 @@ impl App {
         line_rect.min.y -= 6.0;
         let mut child = ui.new_child(UiBuilder::new().max_rect(line_rect));
         ui.add_space(20.0);
-        child.horizontal_centered(|ui| match self.mode {
-            Mode::Client => {
-                ui.checkbox(
-                    &mut self.create_profile,
-                    t!("gui.checkbox.generate_profile"),
-                );
+        child.horizontal_centered(|ui| {
+            let flap_checkbox =
+                Checkbox::new(&mut self.include_flap, t!("gui.checkbox.include_flap"));
+            if self.mode == Mode::MMC {
+                ui.add_sized([ui.available_width() / 6.0, 20.0], flap_checkbox);
+            } else {
+                ui.add(flap_checkbox);
             }
-            Mode::Server => {
-                ui.checkbox(
-                    &mut self.download_minecraft_server,
-                    t!("gui.checkbox.download_minecraft_server"),
-                );
-            }
-            Mode::MMC => {
-                let copy_profile_path = Checkbox::new(
-                    &mut self.copy_generated_location,
-                    t!("gui.checkbox.copy_profile_path"),
-                );
-                ui.add_sized([ui.max_rect().width() / 2.0, 20.0], copy_profile_path);
-                ui.checkbox(
-                    &mut self.generate_zip,
-                    t!("gui.checkbox.generate_instance_zip"),
-                );
+            match self.mode {
+                Mode::Client => {
+                    ui.checkbox(
+                        &mut self.create_profile,
+                        t!("gui.checkbox.generate_profile"),
+                    );
+                }
+                Mode::Server => {
+                    ui.checkbox(
+                        &mut self.download_minecraft_server,
+                        t!("gui.checkbox.download_minecraft_server"),
+                    );
+                }
+                Mode::MMC => {
+                    ui.add_sized(
+                        [ui.available_width() * 2.0 / 3.0, 20.0],
+                        Checkbox::new(
+                            &mut self.copy_generated_location,
+                            t!("gui.checkbox.copy_profile_path"),
+                        ),
+                    );
+                    ui.checkbox(
+                        &mut self.generate_zip,
+                        t!("gui.checkbox.generate_instance_zip"),
+                    );
+                }
             }
         });
     }

@@ -35,6 +35,7 @@
     "gui.mode.mmc": "MultiMC/PrismLauncher",
     "gui.mode.server": "Server",
     "gui.ui.show_loader_betas": "Show Betas",
+    "gui.checkbox.include_flap":"Include Flap",
     "client.error.directory_does_not_exist": "The directory %{dir} does not exist. Make sure you selected the correct folder and that you have started the game at least once before.",
     "client.info.installation_start": "Installing client for %{version} using %{loader} Loader %{loader_version} to %{destination}",
     "client.info.fetching_launch_jsons": "Fetching launch jsons...",

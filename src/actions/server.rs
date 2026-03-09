@@ -31,6 +31,7 @@ pub async fn install(
     generation: Option<u32>,
     location: PathBuf,
     install_server: bool,
+    include_flap: bool,
 ) -> Result<(), InstallerError> {
     install_path(
         sender.clone(),
@@ -41,6 +42,7 @@ pub async fn install(
         &generation,
         &location,
         install_server,
+        include_flap,
     )
     .await?;
 
@@ -68,6 +70,7 @@ async fn install_path(
     generation: &Option<u32>,
     location: &PathBuf,
     install_server: bool,
+    include_flap: bool,
 ) -> Result<(), InstallerError> {
     if !location.exists() {
         std::fs::create_dir_all(&location)?;
@@ -168,13 +171,17 @@ async fn install_path(
         library_files.spawn(async move { download_library(&dir, name, url).await });
     }
 
-    let flap_version = maven::get_latest_version("flap").await?;
-    let flap_path = library_dir.join(format!(
-        "net/ornithemc/flap/flap-{}.jar",
-        flap_version.version
-    ));
-    {
-        let out_path = flap_path.clone();
+    let flap_path = if include_flap {
+        let flap_version = maven::get_latest_version("flap").await?;
+        Some(library_dir.join(format!(
+            "net/ornithemc/flap/flap-{}.jar",
+            flap_version.version
+        )))
+    } else {
+        None
+    };
+    if include_flap {
+        let out_path = flap_path.as_ref().unwrap().clone();
         library_files.spawn(async move {
             maven::download_latest_release("flap", &out_path).await?;
             Ok(out_path)
@@ -246,7 +253,7 @@ async fn install_path(
         &launch_main_class,
         &downloaded_library_files,
         jvm_args,
-        flap_path.strip_prefix(&location.canonicalize()?)?,
+        flap_path.as_deref(),
     )
     .await?;
 
@@ -269,7 +276,7 @@ async fn create_launch_jar(
     launch_main_class: &str,
     library_files: &Vec<PathBuf>,
     jvm_args: Vec<String>,
-    flap_jar_path: &Path,
+    flap_jar_path: Option<&Path>,
 ) -> Result<(), InstallerError> {
     let jar_out = install_location.join(loader_type.get_name().to_owned() + "-server-launch.jar");
     if jar_out.exists() {
@@ -288,10 +295,19 @@ async fn create_launch_jar(
         }
     }
 
-    let mut jar_manifest = launch_jar.by_path("META-INF/MANIFEST.MF")?;
-    let mut mf = String::new();
-    jar_manifest.read_to_string(&mut mf)?;
-    write!(manifest, "{}", mf.replace("\n\r\n", "\n"))?;
+    if flap_jar_path.is_some() {
+        let mut jar_manifest = launch_jar.by_path("META-INF/MANIFEST.MF")?;
+        let mut mf = String::new();
+        jar_manifest.read_to_string(&mut mf)?;
+        write!(manifest, "{}", mf.replace("\n\r\n", "\n"))?;
+    } else {
+        writeln!(manifest, "Manifest-Version: 1.0\r")?;
+        writeln!(
+            manifest,
+            "{}\r",
+            wrap_manifest_line(&format!("Main-Class: {}", launch_main_class))
+        )?;
+    }
     zip.start_file("META-INF/MANIFEST.MF", SimpleFileOptions::default())?;
 
     let mut class_path = String::from("Class-Path: ");
@@ -310,12 +326,14 @@ async fn create_launch_jar(
     )?;
     zip.write_all(&manifest)?;
 
-    zip.start_file("ornithe-args.json", SimpleFileOptions::default())?;
-    zip.write_all(&serde_json::to_vec(&json!({
-        "flap_jar": flap_jar_path,
-        "main_class": launch_main_class,
-        "jvm_args": jvm_args
-    }))?)?;
+    if let Some(flap_path) = flap_jar_path {
+        zip.start_file("ornithe-args.json", SimpleFileOptions::default())?;
+        zip.write_all(&serde_json::to_vec(&json!({
+            "flap_jar": flap_path,
+            "main_class": launch_main_class,
+            "jvm_args": jvm_args
+        }))?)?;
+    }
 
     if loader_type == &LoaderType::Fabric {
         zip.start_file(
@@ -399,6 +417,7 @@ pub async fn install_and_run<I, S>(
     loader_version: LoaderVersion,
     generation: Option<u32>,
     location: PathBuf,
+    include_flap: bool,
     java: Option<&PathBuf>,
     args: Option<I>,
 ) -> Result<bool, InstallerError>
@@ -429,6 +448,7 @@ where
             &generation,
             &location,
             true,
+            include_flap,
         )
         .await?;
     }

@@ -23,6 +23,7 @@ pub async fn install(
     generation: Option<u32>,
     location: PathBuf,
     create_profile: bool,
+    include_flap: bool,
 ) -> Result<(), InstallerError> {
     if !location.exists() {
         return Err(InstallerError::from(t!(
@@ -76,24 +77,26 @@ pub async fn install(
         std::fs::remove_dir_all(&profile_dir)?;
     }
 
-    maven::download_latest_release("flap", &flap_jar).await?;
+    if include_flap {
+        maven::download_latest_release("flap", &flap_jar).await?;
 
-    if let Some(obj) = ornithe_launch_json.as_object_mut() {
-        if !obj.contains_key("arguments") {
-            let a = Value::Object(Map::new());
-            obj.insert("arguments".to_string(), a);
-        };
-        let arguments = obj.get_mut("arguments").unwrap();
-        if let Some(args) = arguments.as_object_mut() {
-            if !args.contains_key("jvm") {
-                args.insert("jvm".to_string(), Value::Array(Vec::new()));
-            }
-            let jvm_args = args.get_mut("jvm").unwrap().as_array_mut();
-            if let Some(jvm) = jvm_args {
-                jvm.insert(
-                    0,
-                    json!(format!("-javaagent:{}", flap_jar.to_string_lossy())),
-                );
+        if let Some(obj) = ornithe_launch_json.as_object_mut() {
+            if !obj.contains_key("arguments") {
+                let a = Value::Object(Map::new());
+                obj.insert("arguments".to_string(), a);
+            };
+            let arguments = obj.get_mut("arguments").unwrap();
+            if let Some(args) = arguments.as_object_mut() {
+                if !args.contains_key("jvm") {
+                    args.insert("jvm".to_string(), Value::Array(Vec::new()));
+                }
+                let jvm_args = args.get_mut("jvm").unwrap().as_array_mut();
+                if let Some(jvm) = jvm_args {
+                    jvm.insert(
+                        0,
+                        json!(format!("-javaagent:{}", flap_jar.to_string_lossy())),
+                    );
+                }
             }
         }
     }

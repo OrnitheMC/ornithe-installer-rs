@@ -30,6 +30,7 @@ pub async fn install(
     copy_profile_path: bool,
     generate_zip: bool,
     generation: Option<u32>,
+    include_flap: bool,
 ) -> Result<(), InstallerError> {
     let _ = sender.send((
         0.1,
@@ -210,26 +211,29 @@ pub async fn install(
         )?;
     }
 
-    zip.write_file(
-        "patches/net.ornithemc.flap.json",
-        serde_json::to_string(&json!({
-            "formatVersion": 1,
-            "name": "Flap",
-            "type": "release",
-            "uid": "net.ornithemc.flap",
-            "version": flap_version,
-            "+agents": [{
-                "name": format!("net.ornithemc:flap:{}", flap_version),
-                "url": maven::MAVEN_URL
-            }]
-        }))?
-        .as_bytes(),
-    )?;
-    pack_components.push(json!({
-        "cachedName": "Flap",
-        "cachedVersion": flap_version,
-        "uid": "net.ornithemc.flap"
-    }));
+    if include_flap {
+        zip.write_file(
+            "patches/net.ornithemc.flap.json",
+            serde_json::to_string(&json!({
+                "formatVersion": 1,
+                "name": "Flap",
+                "type": "release",
+                "uid": "net.ornithemc.flap",
+                "version": flap_version,
+                "+agents": [{
+                    "name": format!("net.ornithemc:flap:{}", flap_version),
+                    "url": maven::MAVEN_URL
+                }]
+            }))?
+            .as_bytes(),
+        )?;
+
+        pack_components.push(json!({
+            "cachedName": "Flap",
+            "cachedVersion": flap_version,
+            "uid": "net.ornithemc.flap"
+        }));
+    }
 
     zip.write_file(
         "mmc-pack.json",
