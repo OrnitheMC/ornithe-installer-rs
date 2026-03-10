@@ -35,6 +35,7 @@
     "gui.mode.mmc": "MultiMC/PrismLauncher",
     "gui.mode.server": "Сервер",
     "gui.ui.show_loader_betas": "Бета-версії",
+    "gui.checkbox.include_flap":"Додати Flap",
     "client.error.directory_does_not_exist": "Тека %{dir} не існує. Перевірте коректність обраного шляху та запустіть гру хоча б один раз.",
     "client.info.installation_start": "Встановлення клієнта для %{version} із завантажувачем %{loader} %{loader_version} до %{destination}",
     "client.info.fetching_launch_jsons": "Отримання JSON для запуску...",
