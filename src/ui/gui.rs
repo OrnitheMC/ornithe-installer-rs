@@ -8,8 +8,8 @@ use std::{
 
 use egui::{
     Align, Button, Checkbox, Color32, ComboBox, FontId, Frame, Id, Layout, Margin, ProgressBar,
-    Response, RichText, ScrollArea, Sense, TextEdit, Theme, Ui, UiBuilder, Vec2, Vec2b, Widget,
-    WidgetText,
+    Response, RichText, ScrollArea, Sense, TextEdit, Theme, Tooltip, Ui, UiBuilder, Vec2, Vec2b,
+    Widget, WidgetText,
     text::{CCursor, CCursorRange},
 };
 use log::{error, info};
@@ -685,10 +685,14 @@ impl App {
         child.horizontal_centered(|ui| {
             let flap_checkbox =
                 Checkbox::new(&mut self.include_flap, t!("gui.checkbox.include_flap"));
-            if self.mode == Mode::MMC {
-                ui.add_sized([ui.available_width() / 6.0, 20.0], flap_checkbox);
+            let flap_box_response = if self.mode == Mode::MMC {
+                ui.add_sized([ui.available_width() / 5.0, 20.0], flap_checkbox)
             } else {
-                ui.add(flap_checkbox);
+                ui.add(flap_checkbox)
+            };
+            if flap_box_response.has_focus() || flap_box_response.hovered() {
+                Tooltip::for_widget(&flap_box_response)
+                    .show(|ui| ui.label(t!("gui.flap.description")));
             }
             match self.mode {
                 Mode::Client => {
