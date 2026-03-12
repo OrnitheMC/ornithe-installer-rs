@@ -35,6 +35,8 @@
     "gui.mode.mmc": "MultiMC/PrismLauncher",
     "gui.mode.server": "Serveur",
     "gui.ui.show_loader_betas": "Montrer les versions Bétas",
+    "gui.checkbox.include_flap": "Inclure Flap",
+    "gui.flap.description": "Flap permet d'utiliser des mods compilés pour différentes intermediaries dans la même instance (ex: LegacyFabric et Ornithe).",
     "client.error.directory_does_not_exist": "Le dossier %{dir} n'existe pas. Assurez vous d'avoir sélectionné le bon dossier et lancé le jeu au moins une fois avant.",
     "client.info.installation_start": "Installation du client pour %{version} utilisant %{loader} Loader %{loader_version} vers %{destination}",
     "client.info.fetching_launch_jsons": "Récupération des jsons de lancement...",
