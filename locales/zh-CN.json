@@ -1,6 +1,6 @@
 {
     "_version": 1,
-    "language_name": "中文",
+    "language_name": "简体中文",
     "gui.ui.title": "Ornithe 安装器",
     "gui.ui.language": "语言: ",
     "gui.error.no_available_minecraft_versions":"无法找到可用的 Minecraft 版本。请确保你已连接到互联网！",
@@ -35,6 +35,8 @@
     "gui.mode.mmc": "MultiMC/PrismLauncher",
     "gui.mode.server": "服务端",
     "gui.ui.show_loader_betas": "显示 Beta 版本",
+    "gui.checkbox.include_flap":"包括 Flap",
+    "gui.flap.description": "Flap 能让你在同一实例中同时运行为不同中间名编译的mod (例如 LegacyFabric 和 Ornithe).",
     "client.error.directory_does_not_exist": "目录： %{dir} 不存在。请确保你选择了正确的文件夹并且至少启动过一次游戏。",
     "client.info.installation_start": "正在安装 Minecraft %{version} 的客户端和 %{loader} %{loader_version} 加载器到 %{destination}",
     "client.info.fetching_launch_jsons": "正在获取启动 JSON...",
