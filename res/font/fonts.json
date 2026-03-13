@@ -10,6 +10,10 @@
       "msjh.ttc",
       "msjhbd.ttc"
     ],
+    "zh-TW": [
+      "msyh.ttc",
+      "msjh.ttc"
+    ],
     "ja": [
       "meiryo.ttc",
       "meiryob.ttc",
@@ -28,6 +32,10 @@
       "AR PL UMing CN",
       "AR PL UKai CN"
     ],
+    "zh-TW": [
+      "Noto Sans CJK TC",
+      "WenQuanYi Zen Hei"
+    ],
     "ja": [
       "Noto Sans CJK JP",
       "Noto Sans CJK SC",
@@ -45,6 +53,9 @@
       "STHeiti Medium.ttc",
       "Hiragino Sans GB.ttc",
       "Arial Unicode.ttf"
+    ],
+    "zh-TW": [
+      "PingFang.ttc"
     ],
     "ja": [
       "ヒラギノ角ゴシック W3.ttc",
