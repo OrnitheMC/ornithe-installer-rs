@@ -1,6 +1,6 @@
 {
     "_version": 1,
-    "language_name": "中文",
+    "language_name": "简体中文",
     "gui.ui.title": "Ornithe 安装器",
     "gui.ui.language": "语言: ",
     "gui.error.no_available_minecraft_versions":"无法找到可用的 Minecraft 版本。请确保你已连接到互联网！",
