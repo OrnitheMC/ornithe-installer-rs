@@ -75,7 +75,6 @@ async fn install_path(
     if !location.exists() {
         std::fs::create_dir_all(&location)?;
     }
-    let location = location.canonicalize()?;
 
     let _ = sender.send((
         0.1,
@@ -88,6 +87,7 @@ async fn install_path(
         )
         .into(),
     ));
+    let location = location.canonicalize()?;
 
     let clear_paths = [location.join(".fabric"), location.join(".quilt")];
     for path in clear_paths {
@@ -308,7 +308,6 @@ async fn create_launch_jar(
             wrap_manifest_line(&format!("Main-Class: {}", launch_main_class))
         )?;
     }
-    zip.start_file("META-INF/MANIFEST.MF", SimpleFileOptions::default())?;
 
     let mut class_path = String::from("Class-Path: ");
     for library in library_files {
@@ -318,22 +317,25 @@ async fn create_launch_jar(
         }
     }
 
+    if let Some(flap_path) = flap_jar_path {
+        if let Some(path) = flap_path.strip_prefix(install_location)?.to_str() {
+            zip.start_file("ornithe-args.json", SimpleFileOptions::default())?;
+            zip.write_all(&serde_json::to_vec(&json!({
+                "flap_jar": path.replace("\\", "/"),
+                "main_class": launch_main_class,
+                "jvm_args": jvm_args
+            }))?)?;
+        }
+    }
+
     writeln!(manifest, "{}\r", wrap_manifest_line(class_path.trim_end()))?;
     writeln!(
         manifest,
         "{}\r",
         wrap_manifest_line(&format!("Minecraft-Version: {}\r", version.id))
     )?;
+    zip.start_file("META-INF/MANIFEST.MF", SimpleFileOptions::default())?;
     zip.write_all(&manifest)?;
-
-    if let Some(flap_path) = flap_jar_path {
-        zip.start_file("ornithe-args.json", SimpleFileOptions::default())?;
-        zip.write_all(&serde_json::to_vec(&json!({
-            "flap_jar": flap_path,
-            "main_class": launch_main_class,
-            "jvm_args": jvm_args
-        }))?)?;
-    }
 
     if loader_type == &LoaderType::Fabric {
         zip.start_file(
@@ -358,6 +360,10 @@ fn wrap_manifest_line(line: &str) -> String {
         if count == 72 {
             res += "\r\n ";
             count = 1;
+            if char == ' ' {
+                res += " ";
+                count += 1;
+            }
         }
     }
     res

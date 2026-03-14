@@ -23,7 +23,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("net.ornithemc:flap:0.0.1")
+    compileOnly("net.ornithemc:flap:0.0.2")
     compileOnly("org.apache.logging.log4j:log4j-core:2.19.0")
 }
 

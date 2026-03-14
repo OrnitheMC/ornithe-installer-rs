@@ -3,6 +3,8 @@ package net.ornithemc.server_launcher;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,18 +37,41 @@ public class ServerLauncher {
 	public static void main(String[] args) {
 		try (var loggerCtx = getLoggerCtx()) {
 			var log = loggerCtx.getLogger("ServerLauncher");
-			var processInfo = ProcessHandle.current().info();
+			var handle = ProcessHandle.current();
+			var processInfo = handle.info();
 			List<String> cmd = new ArrayList<>();
 			cmd.add(processInfo.command().orElseThrow());
 			var in = ServerLauncher.class.getResourceAsStream("/ornithe-args.json");
 			var gson = new GsonBuilder().create();
 			var arguments = new ArrayList<String>();
-			processInfo.arguments().ifPresent(a -> Collections.addAll(arguments, a));
+			if (System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win")) {
+				try {
+					var p = new ProcessBuilder("powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+							"(Get-CimInstance Win32_Process -Filter 'ProcessId = \"" + handle.pid() + "\"').CommandLine")
+							.start();
+					try (var reader = p.inputReader(StandardCharsets.UTF_8)) {
+						var cmdLine = reader.readLine();
+						Collections.addAll(arguments, cmdLine.substring(cmdLine.indexOf(' ')).split(" "));
+						arguments.removeIf(String::isBlank);
+					}
+				} catch (IOException e) {
+					log.error("Failed to gather windows process arguments!", e);
+					return;
+				}
+			} else {
+				var processArgs = processInfo.arguments();
+				if (processArgs.isPresent()) {
+					Collections.addAll(arguments, processArgs.get());
+				} else {
+					log.error("Failed to find process arguments, does the jvm just give up on this platform as well?");
+					return;
+				}
+			}
 			arguments.removeAll(Arrays.asList(args));
 			var cp = new ArrayList<String>();
 			if (in != null) {
-				var self = ServerLauncher.class.getProtectionDomain().getCodeSource().getLocation().getPath();
 				try (in; var reader = new InputStreamReader(in)) {
+					var self = Path.of(ServerLauncher.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toString();
 					var ornitheArgs = gson.fromJson(reader, OrnitheArgs.class);
 					if (arguments.contains("-jar")) {
 						int jarIndex = arguments.indexOf("-jar");
@@ -77,6 +102,9 @@ public class ServerLauncher {
 				} catch (IOException e) {
 					log.error("Failed to read ornithe launch arguments:", e);
 					return;
+				} catch (URISyntaxException e) {
+					log.error("Failed to retrieve own location: ", e);
+					return;
 				}
 			}
 			try {
@@ -85,6 +113,7 @@ public class ServerLauncher {
 				cmd.add("-Dloader.gameJarPath=" + serverJar);
 			} catch (IOException e) {
 				log.error("Failed to transform server jar:", e);
+				return;
 			}
 			cmd.addAll(arguments);
 			Collections.addAll(cmd, args);
