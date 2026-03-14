@@ -25,6 +25,8 @@ async fn main() {
     // The first argument is the binary name
     #[cfg(feature = "gui")]
     if std::env::args().count() <= 1 {
+        #[cfg(windows)]
+        hide_console_ng::hide_console();
         if let Ok(_) = crate::ui::gui::run().await {
             return;
         }

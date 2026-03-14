@@ -1783,6 +1783,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
+name = "hide_console_ng"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4654ddc331902fe07fec846f2ea220cb29cbca09a47e1b9f3e28c7d1fa316345"
+
+[[package]]
 name = "http"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2906,6 +2912,7 @@ dependencies = [
  "embed-resource",
  "env_logger",
  "fontconfig",
+ "hide_console_ng",
  "indicatif",
  "log",
  "rand",
