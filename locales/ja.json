@@ -35,6 +35,7 @@
   "gui.mode.mmc": "MultiMC/PrismLauncher",
   "gui.mode.server": "サーバー",
   "gui.ui.show_loader_betas": "Betaを表示",
+  "gui.checkbox.include_flap":"Flapを含める",
   "client.error.directory_does_not_exist": "ディレクトリ%{dir}は存在しません。 正しいフォルダを選択していることと以前までに一度は起動したことがあることを確認してください。",
   "client.info.installation_start": "バージョン %{version} を %{loader} ローダーの %{loader_version} を %{destination} にインストール中",
   "client.info.fetching_launch_jsons": "launch jsonを同期中...",
