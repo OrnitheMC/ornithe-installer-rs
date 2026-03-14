@@ -29,7 +29,8 @@ public class ServerLauncher {
 										.addAttribute("pattern", "%style{[%d{HH:mm:ss}]}{blue} %highlight{[%t/%level]}{FATAL=red, ERROR=red, WARN=yellow, INFO=green, DEBUG=green, TRACE=blue} %style{(%logger{1})}{cyan} %highlight{%msg%n}{FATAL=red, ERROR=red, WARN=normal, INFO=normal, DEBUG=normal, TRACE=normal}"))
 				).add(
 						builder.newRootLogger("all")
-								.add(builder.newAppenderRef("SysOut").addAttribute("level", "INFO")))
+								.add(builder.newAppenderRef("SysOut").addAttribute("level", Boolean.getBoolean("ornithe_serverlauncher.debug") ||
+										Boolean.parseBoolean(System.getenv("ORNITHE_SERVERLAUNCHER_DEBUG")) ? "DEBUG" : "INFO")))
 				.build(false);
 		return Configurator.initialize(config);
 	}
@@ -45,13 +46,23 @@ public class ServerLauncher {
 			var gson = new GsonBuilder().create();
 			var arguments = new ArrayList<String>();
 			if (System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win")) {
+				log.debug("Reading process arguments from powershell...");
 				try {
 					var p = new ProcessBuilder("powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
 							"(Get-CimInstance Win32_Process -Filter 'ProcessId = \"" + handle.pid() + "\"').CommandLine")
 							.start();
 					try (var reader = p.inputReader(StandardCharsets.UTF_8)) {
 						var cmdLine = reader.readLine();
-						Collections.addAll(arguments, cmdLine.substring(cmdLine.indexOf(' ')).split(" "));
+						log.debug("Read cmdLine: {}", cmdLine);
+						if (cmdLine.startsWith("\"") && cmdLine.lastIndexOf('"') != 0) {
+							cmdLine = cmdLine.substring(1);
+							cmdLine = cmdLine.substring(cmdLine.indexOf('"')+1);
+						} else {
+							cmdLine = cmdLine.substring(cmdLine.indexOf(" "));
+						}
+						var cmdArgs = cmdLine.trim().split(" ");
+						log.debug("Sanitized arguments: {}", () -> Arrays.toString(cmdArgs));
+						Collections.addAll(arguments, cmdArgs);
 						arguments.removeIf(String::isBlank);
 					}
 				} catch (IOException e) {
@@ -59,9 +70,11 @@ public class ServerLauncher {
 					return;
 				}
 			} else {
+				log.debug("Retrieving process args from process handle info");
 				var processArgs = processInfo.arguments();
 				if (processArgs.isPresent()) {
 					Collections.addAll(arguments, processArgs.get());
+					log.debug("Got arguments: {}", () -> Arrays.toString(processArgs.get()));
 				} else {
 					log.error("Failed to find process arguments, does the jvm just give up on this platform as well?");
 					return;
@@ -78,6 +91,7 @@ public class ServerLauncher {
 						var jar = arguments.get(jarIndex + 1);
 						arguments.set(jarIndex, "-cp");
 						arguments.set(jarIndex + 1, self);
+						log.debug("Put self on classpath instead of -jar");
 						try (var fs = FileSystems.newFileSystem(Path.of(jar)); var mnIn = Files.newInputStream(fs.getPath("/META-INF/MANIFEST.MF"))) {
 							var mn = new Manifest(mnIn);
 							var attributes = mn.getMainAttributes();
@@ -108,6 +122,7 @@ public class ServerLauncher {
 				}
 			}
 			try {
+				log.debug("Preparing server jar...");
 				var serverJar = stripShadedLibs(getServerJarPath(), cp);
 				cmd.add("-Dfabric.gameJarPath=" + serverJar);
 				cmd.add("-Dloader.gameJarPath=" + serverJar);
@@ -117,6 +132,7 @@ public class ServerLauncher {
 			}
 			cmd.addAll(arguments);
 			Collections.addAll(cmd, args);
+			log.debug("Starting: {}", () -> String.join(" ", cmd));
 			try {
 				new ProcessBuilder(cmd).inheritIO().start().waitFor();
 			} catch (IOException | InterruptedException e) {
