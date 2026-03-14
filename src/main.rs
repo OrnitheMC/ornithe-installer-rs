@@ -30,6 +30,8 @@ async fn main() {
         if let Ok(_) = crate::ui::gui::run().await {
             return;
         }
+        #[cfg(windows)]
+        hide_console_ng::show_unconditionally();
     }
 
     crate::ui::cli::run().await

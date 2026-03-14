@@ -239,6 +239,7 @@ async fn do_install(
         let loader_versions = all_loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let location = matches.get_one::<PathBuf>("dir").unwrap().clone();
+        let include_flap = !matches.get_flag("exclude-flap");
         if let Some(matches) = matches.subcommand_matches("run") {
             let java = matches.get_one::<PathBuf>("java");
             let run_args = matches.get_one::<String>("args");
@@ -250,7 +251,7 @@ async fn do_install(
                 loader_version,
                 info.calamus_generation,
                 location,
-                !matches.get_flag("exclude-flap"),
+                include_flap,
                 java,
                 run_args.map(|s| s.split(" ")),
             )
@@ -269,7 +270,7 @@ async fn do_install(
             info.calamus_generation,
             location,
             matches.get_flag("download-minecraft"),
-            !matches.get_flag("exclude-flap"),
+            include_flap,
         )
         .await?;
         return Ok(InstallationResult::Installed);
