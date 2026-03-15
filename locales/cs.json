@@ -35,6 +35,8 @@
     "gui.mode.mmc": "MultiMC/PrismLauncher",
     "gui.mode.server": "Server",
     "gui.ui.show_loader_betas": "Zobrazit Beta verze",
+    "gui.checkbox.include_flap":"Zahrnout Flap",
+    "gui.flap.description": "Flap umožňuje běh módů zkompilované pro jiné intermediary ve stejné instanci (např. LegacyFabric a Ornithe).",
     "client.error.directory_does_not_exist": "Adresář %{dir} neexistuje. Ujistěte se že jsem zvolili správný adresář a že jste alespoň jednou spustili hru.",
     "client.info.installation_start": "Instaluji klienta pro %{version} s použitím %{loader} Loaderu %{loader_version} do %{destination}",
     "client.info.fetching_launch_jsons": "Načítání spuštěcích json souborů...",
