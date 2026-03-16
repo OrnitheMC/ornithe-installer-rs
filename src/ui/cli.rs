@@ -422,7 +422,7 @@ fn add_arguments(command: Command) -> Command {
                 .value_parser(["fabric", "quilt"]),
         )
         .arg(arg!(--"loader-version" <VERSION> "Loader version to use").default_value("latest"))
-        .arg(arg!(--"exclude-flap" "Do not include Flap (Cross-Intermediary Generation Remapper)"))
+        .arg(arg!(--"exclude-flap" "Do not include Flap (Cross-Intermediary Remapper)"))
 }
 
 fn add_gen_argument(command: Command) -> Command {
