@@ -15,13 +15,7 @@ pub async fn fetch_versions(generation: &Option<u32>) -> Result<VersionManifest,
         Some(g) => LAUNCHER_META_URL_VERSIONED.replacen("{}", &format!("gen{}", g), 1),
         None => LAUNCHER_META_URL.to_string(),
     };
-    super::CLIENT
-        .get(&url)
-        .send()
-        .await?
-        .json::<VersionManifest>()
-        .await
-        .map_err(|e| e.into())
+    super::get_json::<VersionManifest>(url).await
 }
 
 pub async fn vanilla_profile_name(
@@ -40,7 +34,7 @@ pub async fn fetch_launch_json(
     version: &MinecraftVersion,
     generation: &Option<u32>,
 ) -> Result<(String, String), InstallerError> {
-    let res = super::CLIENT.get(&version.url).send().await?.text().await;
+    let res = super::get_text(&version.url).await;
     let mut json = match res {
         Ok(j) => match serde_json::from_str::<Value>(&j) {
             Ok(v) => v,
@@ -49,10 +43,7 @@ pub async fn fetch_launch_json(
             }
         },
         Err(e) => {
-            return Err(InstallerError::from(t!(
-                "manifest.error.failed_to_deserialize",
-                error = e.to_string()
-            )));
+            return Err(e);
         }
     };
 
@@ -69,24 +60,19 @@ pub async fn fetch_launch_json(
 
 async fn fetch_version_details(
     version: &MinecraftVersion,
-) -> Result<VersionDetails, reqwest::Error> {
-    super::CLIENT
-        .get(version.details.clone())
-        .send()
-        .await?
-        .json::<VersionDetails>()
-        .await
+) -> Result<VersionDetails, InstallerError> {
+    super::get_json::<VersionDetails>(&version.details).await
 }
 
 #[allow(dead_code)]
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct VersionManifest {
     pub latest: LatestVersions,
     pub versions: Vec<MinecraftVersion>,
 }
 
 #[allow(dead_code)]
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct LatestVersions {
     old_alpha: String,
     classic_server: String,
@@ -98,7 +84,7 @@ pub struct LatestVersions {
 }
 
 #[allow(dead_code)]
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct MinecraftVersion {
     pub id: String,
     #[serde(rename = "type")]
@@ -140,7 +126,7 @@ impl MinecraftVersion {
 }
 
 #[allow(dead_code)]
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct VersionDetails {
     libraries: Option<Value>,
     #[serde(rename(deserialize = "normalizedVersion"))]
@@ -148,14 +134,14 @@ pub struct VersionDetails {
     downloads: VersionDownloads,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct VersionDownloads {
     client: Option<VersionDownload>,
     server: Option<VersionDownload>,
 }
 
 #[allow(dead_code)]
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct VersionDownload {
     pub sha1: String,
     pub size: u32,
@@ -165,12 +151,7 @@ pub struct VersionDownload {
 pub async fn find_lwjgl_url_version(
     version: &MinecraftVersion,
 ) -> Result<(String, String), InstallerError> {
-    let details = super::CLIENT
-        .get(&version.url)
-        .send()
-        .await?
-        .json::<Value>()
-        .await?;
+    let details = super::get_json::<Value>(&version.url).await?;
 
     if let Some(libraries) = details["libraries"].as_array() {
         for library in libraries {

@@ -13,11 +13,8 @@ use egui::{
     text::{CCursor, CCursorRange},
 };
 use log::{error, info};
-use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
-use tokio::{
-    sync::mpsc::{UnboundedReceiver, unbounded_channel},
-    task::JoinHandle,
-};
+use rfd::{AsyncMessageDialog, MessageButtons, MessageDialogResult};
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 
 use crate::{
     errors::InstallerError,
@@ -57,16 +54,6 @@ pub async fn run() -> Result<(), InstallerError> {
 }
 
 async fn create_window() -> Result<(), InstallerError> {
-    let data = eframe::icon_data::from_png_bytes(crate::ORNITHE_ICON_BYTES)
-        .expect("The Ornithe Icon is a valid PNG file");
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([630.0, 490.0])
-            .with_resizable(false)
-            .with_icon(data),
-        renderer: eframe::Renderer::Wgpu,
-        ..Default::default()
-    };
     let res = App::create().await;
     if let Err(e) = res {
         error!("{}", e.0);
@@ -74,17 +61,75 @@ async fn create_window() -> Result<(), InstallerError> {
         return Ok(());
     }
     let app = res.unwrap();
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let data = eframe::icon_data::from_png_bytes(crate::ORNITHE_ICON_BYTES)
+            .expect("The Ornithe Icon is a valid PNG file");
+        let options = eframe::NativeOptions {
+            viewport: egui::ViewportBuilder::default()
+                .with_inner_size([630.0, 490.0])
+                .with_resizable(false)
+                .with_icon(data),
+            renderer: eframe::Renderer::Wgpu,
+            ..Default::default()
+        };
 
-    eframe::run_native(
-        &("Ornithe Installer ".to_owned() + crate::VERSION),
-        options,
-        Box::new(|_cc| {
-            // load needed system fonts
-            load_system_font_to_egui(&_cc.egui_ctx);
+        eframe::run_native(
+            &("Ornithe Installer ".to_owned() + crate::VERSION),
+            options,
+            Box::new(|cc| {
+                // load needed system fonts
+                load_system_font_to_egui(&cc.egui_ctx);
 
-            Ok(Box::new(app))
-        }),
-    )?;
+                Ok(Box::new(app))
+            }),
+        )?;
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        use eframe::wasm_bindgen::JsCast as _;
+
+        let web_options = eframe::WebOptions::default();
+
+        let document = web_sys::window()
+            .expect("No window")
+            .document()
+            .expect("No document");
+
+        let canvas = document
+            .get_element_by_id("main_canvas")
+            .expect("Failed to find the_canvas_id")
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .expect("main_canvas was not a HtmlCanvasElement");
+
+        let start_result = eframe::WebRunner::new()
+            .start(
+                canvas,
+                web_options,
+                Box::new(|cc| {
+                    // load needed system fonts
+                    load_system_font_to_egui(&cc.egui_ctx);
+
+                    Ok(Box::new(app))
+                }),
+            )
+            .await;
+
+        // Remove the loading text and spinner:
+        if let Some(loading_text) = document.get_element_by_id("loading_text") {
+            match start_result {
+                Ok(_) => {
+                    loading_text.remove();
+                }
+                Err(e) => {
+                    loading_text.set_inner_html(
+                        "<p> The app has crashed. See the developer console for details. </p>",
+                    );
+                    panic!("Failed to start eframe: {e:?}");
+                }
+            }
+        }
+    }
     Ok(())
 }
 
@@ -108,10 +153,13 @@ fn display_dialog_ext<F, T: Into<String> + Display, M: Into<String> + Display>(
         .set_level(rfd::MessageLevel::Info)
         .set_description(message)
         .set_buttons(buttons);
-    let fut = dialog.show();
-    tokio::spawn(async move {
-        after(fut.await);
-    });
+    let fut = async move {
+        after(dialog.show().await);
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    tokio::spawn(fut);
+    #[cfg(target_arch = "wasm32")]
+    wasm_bindgen_futures::spawn_local(fut);
 }
 
 struct App {
@@ -141,6 +189,7 @@ struct App {
     ),
     file_picker_open: bool,
     minecraft_version_dropdown_open: bool,
+    #[cfg(not(target_arch = "wasm32"))]
     detonation_easter_egg: bool,
     include_flap: bool,
 }
@@ -148,17 +197,44 @@ struct App {
 pub struct InstallationProgress {
     last_progress: f32,
     status: Vec<String>,
+    #[cfg(not(target_arch = "wasm32"))]
     task: Option<(
         UnboundedReceiver<(f32, String)>,
-        JoinHandle<Result<(), InstallerError>>,
+        tokio::task::JoinHandle<Result<(), InstallerError>>,
     )>,
+    #[cfg(target_arch = "wasm32")]
+    task: Option<UnboundedReceiver<(f32, String)>>,
 }
 
+#[cfg(target_arch = "wasm32")]
+impl InstallationProgress {
+    pub fn new(task: UnboundedReceiver<(f32, String)>) -> Self {
+        Self {
+            last_progress: 0.0,
+            status: Vec::new(),
+            task: Some(task),
+        }
+    }
+
+    pub fn rec(&mut self) -> Option<&mut UnboundedReceiver<(f32, String)>> {
+        self.task.as_mut()
+    }
+
+    pub fn is_finished(&self) -> bool {
+        self.last_progress >= 1.0 && self.task.is_some()
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.last_progress < 1.0 && self.task.is_some()
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl InstallationProgress {
     pub fn new(
         task: (
             UnboundedReceiver<(f32, String)>,
-            JoinHandle<Result<(), InstallerError>>,
+            tokio::task::JoinHandle<Result<(), InstallerError>>,
         ),
     ) -> Self {
         Self {
@@ -168,8 +244,30 @@ impl InstallationProgress {
         }
     }
 
-    pub fn poll(&mut self) {
+    pub fn rec(&mut self) -> Option<&mut UnboundedReceiver<(f32, String)>> {
         if let Some((ref mut rec, _)) = self.task {
+            return Some(rec);
+        }
+        None
+    }
+
+    pub fn is_finished(&self) -> bool {
+        if let Some((_, task)) = &self.task {
+            return task.is_finished();
+        }
+        false
+    }
+
+    pub fn is_running(&self) -> bool {
+        if let Some((_, task)) = &self.task {
+            return !task.is_finished();
+        }
+        false
+    }
+}
+impl InstallationProgress {
+    pub fn poll(&mut self) {
+        if let Some(ref mut rec) = self.rec() {
             match rec.try_recv() {
                 Ok((progress, message)) => {
                     info!("{}% - {}", (progress * 100.0) as i32, &message);
@@ -259,6 +357,7 @@ impl App {
             file_picker_open: false,
             installation_task: None,
             minecraft_version_dropdown_open: false,
+            #[cfg(not(target_arch = "wasm32"))]
             detonation_easter_egg: rand::random_bool(0.001),
             include_flap: true,
         };
@@ -266,6 +365,7 @@ impl App {
         Ok(app)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn add_location_picker(&mut self, frame: &mut eframe::Frame, ui: &mut egui::Ui) {
         ui.label(if self.mode == Mode::MMC && self.generate_zip {
             if *rust_i18n::locale() == *"fr" && self.detonation_easter_egg {
@@ -295,7 +395,7 @@ impl App {
                 );
             }
             if ui.button(t!("gui.ui.button.pick_location")).clicked() {
-                let picked = AsyncFileDialog::new()
+                let picked = rfd::AsyncFileDialog::new()
                     .set_directory(Path::new(match self.mode {
                         Mode::Client => &self.client_install_location,
                         Mode::Server => &self.server_install_location,
@@ -546,6 +646,8 @@ impl App {
                 .clone();
             let include_flap = self.include_flap;
             let (sender, receiver) = unbounded_channel();
+            #[cfg(target_arch = "wasm32")]
+            let sender2 = sender.clone();
             match self.mode {
                 Mode::Client => {
                     let loader_type = self.selected_loader_type.clone();
@@ -559,7 +661,7 @@ impl App {
                                 return;
                             }
                         };
-                    let handle = tokio::spawn(crate::actions::client::install(
+                    let fut = crate::actions::client::install(
                         sender,
                         selected_version,
                         intermediary_version,
@@ -569,8 +671,24 @@ impl App {
                         location,
                         create_profile,
                         include_flap,
-                    ));
-                    self.installation_task = Some(InstallationProgress::new((receiver, handle)));
+                    );
+
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        self.installation_task = Some(InstallationProgress::new(receiver));
+                        wasm_bindgen_futures::spawn_local(async move {
+                            let res = fut.await;
+                            sender2
+                                .send((1.1, String::new()))
+                                .expect("failed to finish");
+                            App::post_installation(res);
+                        });
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        self.installation_task =
+                            Some(InstallationProgress::new((receiver, tokio::spawn(fut))));
+                    }
                 }
                 Mode::Server => {
                     let loader_type = self.selected_loader_type.clone();
@@ -584,20 +702,33 @@ impl App {
                                 return;
                             }
                         };
-                    self.installation_task = Some(InstallationProgress::new((
-                        receiver,
-                        tokio::spawn(crate::actions::server::install(
-                            sender,
-                            selected_version,
-                            intermediary_version,
-                            loader_type,
-                            loader_version,
-                            None,
-                            location,
-                            download_server,
-                            include_flap,
-                        )),
-                    )));
+                    let fut = crate::actions::server::install(
+                        sender,
+                        selected_version,
+                        intermediary_version,
+                        loader_type,
+                        loader_version,
+                        None,
+                        location,
+                        download_server,
+                        include_flap,
+                    );
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        self.installation_task = Some(InstallationProgress::new(receiver));
+                        wasm_bindgen_futures::spawn_local(async move {
+                            let res = fut.await;
+                            sender2
+                                .send((1.1, String::new()))
+                                .expect("failed to finish");
+                            App::post_installation(res);
+                        })
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        self.installation_task =
+                            Some(InstallationProgress::new((receiver, tokio::spawn(fut))));
+                    }
                 }
                 Mode::MMC => {
                     let loader_type = self.selected_loader_type.clone();
@@ -612,7 +743,7 @@ impl App {
                                 return;
                             }
                         };
-                    let handle = tokio::spawn(crate::actions::mmc_pack::install(
+                    let fut = crate::actions::mmc_pack::install(
                         sender,
                         selected_version,
                         intermediary_version,
@@ -623,8 +754,23 @@ impl App {
                         generate_zip,
                         None,
                         include_flap,
-                    ));
-                    self.installation_task = Some(InstallationProgress::new((receiver, handle)));
+                    );
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        self.installation_task = Some(InstallationProgress::new(receiver));
+                        wasm_bindgen_futures::spawn_local(async move {
+                            let res = fut.await;
+                            sender2
+                                .send((1.1, String::new()))
+                                .expect("failed to finish");
+                            App::post_installation(res);
+                        })
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        self.installation_task =
+                            Some(InstallationProgress::new((receiver, tokio::spawn(fut))));
+                    }
                 }
             }
         } else {
@@ -636,42 +782,19 @@ impl App {
     }
 
     fn monitor_installation(&mut self) {
-        if let Some(InstallationProgress { task: install, .. }) = &self.installation_task {
-            if install.as_ref().map(|t| t.1.is_finished()).unwrap_or(false) {
+        if let Some(progress) = &self.installation_task {
+            if progress.is_finished() {
                 let prog = self.installation_task.as_mut().unwrap();
-                while !prog.task.as_ref().map(|t| t.0.is_empty()).unwrap_or(false) {
+                while !prog.rec().map(|rec| rec.is_empty()).unwrap_or(false) {
                     prog.poll();
                 }
-                let (_, handle) = prog.task.take().unwrap();
-                tokio::spawn(async move {
-                    match handle.await.unwrap() {
-                        Err(e) => {
-                            error!("{}", e.0);
-                            display_dialog(
-                                t!("gui.error.installation_failed"),
-                                t!("gui.error.failed_to_install", error = e.0),
-                            )
-                        }
-                        Ok(_) => display_dialog_ext(
-                            t!("gui.dialog.installation_successful"),
-                            t!("gui.dialog.installation_successful.message"),
-                            MessageButtons::YesNo,
-                            |res| {
-                                if res == MessageDialogResult::Yes {
-                                    if webbrowser::open(crate::OSL_MODRINTH_URL).is_err() {
-                                        display_dialog(
-                                            t!("gui.error.failed_to_open_modrinth"),
-                                            t!(
-                                                "error.failed_to_open_modrinth.message",
-                                                osl_url = crate::OSL_MODRINTH_URL
-                                            ),
-                                        );
-                                    }
-                                }
-                            },
-                        ),
-                    }
-                });
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    let (_, handle) = prog.task.take().unwrap();
+                    tokio::spawn(async move {
+                        App::post_installation(handle.await.unwrap());
+                    });
+                }
             }
         }
     }
@@ -796,8 +919,7 @@ impl App {
             if self
                 .installation_task
                 .as_ref()
-                .and_then(|t| t.task.as_ref())
-                .map(|t| !t.1.is_finished())
+                .map(|t| t.is_running())
                 .unwrap_or(false)
             {
                 back = back.sense(Sense::empty());
@@ -831,10 +953,40 @@ impl App {
             ui.label(t!("gui.ui.language"));
         });
     }
+
+    fn post_installation(result: Result<(), InstallerError>) {
+        match result {
+            Err(e) => {
+                error!("{}", e.0);
+                display_dialog(
+                    t!("gui.error.installation_failed"),
+                    t!("gui.error.failed_to_install", error = e.0),
+                )
+            }
+            Ok(_) => display_dialog_ext(
+                t!("gui.dialog.installation_successful"),
+                t!("gui.dialog.installation_successful.message"),
+                MessageButtons::YesNo,
+                |res| {
+                    if res == MessageDialogResult::Yes {
+                        if webbrowser::open(crate::OSL_MODRINTH_URL).is_err() {
+                            display_dialog(
+                                t!("gui.error.failed_to_open_modrinth"),
+                                t!(
+                                    "error.failed_to_open_modrinth.message",
+                                    osl_url = crate::OSL_MODRINTH_URL
+                                ),
+                            );
+                        }
+                    }
+                },
+            ),
+        }
+    }
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.set_zoom_factor(1.5);
         ctx.options_mut(|opt| opt.fallback_theme = Theme::Light);
 
@@ -871,8 +1023,11 @@ impl eframe::App for App {
                     ui.add_space(15.0);
                     self.add_loader(ui);
 
-                    ui.add_space(15.0);
-                    self.add_location_picker(frame, ui);
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        ui.add_space(15.0);
+                        self.add_location_picker(_frame, ui);
+                    }
                 });
 
                 ui.add_space(15.0);

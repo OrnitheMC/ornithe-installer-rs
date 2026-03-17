@@ -1,0 +1,17 @@
+#[[hooks]]
+#stage = "pre_build"
+#command = "sh"
+#command_arguments = ["trunk_build.sh"]
+#[[hooks.windows]]
+#command = "cmd"
+
+[watch]
+ignore = ["target"]
+
+#[[hooks]]
+#stage = "build"
+#command = "cargo" 
+#command_arguments = ["build", "--target", "wasm32-wasip2", "--release"]
+
+[serve]
+headers = { "Cross-Origin-Embedder-Policy" = "require-corp", "Cross-Origin-Opener-Policy" = "*", "Access-Control-Allow-Origin" = "*" }

@@ -63,5 +63,16 @@
       "ヒラギノ丸ゴ ProN W4.ttc",
       "Hiragino Sans GB.ttc"
     ]
+  },
+  "web": {
+    "zh-CN": [
+      "https://github.com/notofonts/noto-cjk/raw/refs/heads/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf"
+    ],
+    "zh-TW": [
+      "https://github.com/notofonts/noto-cjk/raw/refs/heads/main/Sans/OTF/TraditionalChinese/NotoSansCJKtc-Medium.otf"
+    ],
+    "ja": [
+      "https://github.com/notofonts/noto-cjk/raw/refs/heads/main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf"
+    ]
   }
 }

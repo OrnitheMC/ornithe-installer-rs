@@ -8,11 +8,13 @@ pub mod gui;
 #[cfg(feature = "gui")]
 mod font_loader;
 
+#[allow(unused)]
 fn home_dir() -> Option<PathBuf> {
     #[allow(deprecated)]
     std::env::home_dir()
 }
 
+#[allow(unused)]
 fn location(minecraft_path: Option<PathBuf>, default: &str) -> String {
     use std::env::current_dir;
 
@@ -52,6 +54,12 @@ pub fn dot_minecraft_location() -> String {
     )
 }
 
+#[cfg(target_arch = "wasm32")]
+pub fn dot_minecraft_location() -> String {
+    String::new()
+}
+
+#[allow(unused)]
 fn current_dir(default: &str) -> String {
     let fallback = home_dir().unwrap_or(PathBuf::from(default));
     std::env::current_dir()
@@ -72,6 +80,12 @@ pub fn current_location() -> String {
     current_dir(r"C:\")
 }
 
+#[cfg(target_arch = "wasm32")]
+pub fn current_location() -> String {
+    String::new()
+}
+
+#[allow(unused)]
 fn server_dir(default: &str) -> String {
     let fallback = home_dir().unwrap_or(PathBuf::from(default));
     std::env::current_dir()
@@ -91,4 +105,9 @@ pub fn server_location() -> String {
 #[cfg(target_os = "windows")]
 pub fn server_location() -> String {
     server_dir(r"C:\")
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn server_location() -> String {
+    String::new()
 }

@@ -24,6 +24,8 @@ struct SystemFontList {
     linux: PlatformFonts,
     #[cfg(target_os = "macos")]
     macos: PlatformFonts,
+    #[cfg(target_arch = "wasm32")]
+    web: PlatformFonts,
 }
 
 type PlatformFonts = HashMap<String, Vec<String>>;
@@ -82,7 +84,43 @@ fn find_system_font() -> HashMap<String, FontData> {
         load_fonts_from_fontconfig(&sys_font_list.linux, &mut result);
     }
 
+    #[cfg(target_arch = "wasm32")]
+    {
+        load_fonts_from_url(&sys_font_list.web, &mut result);
+    }
+
     result
+}
+
+#[cfg(target_arch = "wasm32")]
+fn load_fonts_from_url(platform_fonts: &PlatformFonts, result: &mut HashMap<String, FontData>) {
+    use tokio::task::JoinSet;
+
+    let mut set = JoinSet::new();
+    for (language, font_urls) in platform_fonts {
+        for url in font_urls {
+            let loc = url.clone();
+            let lang = language.clone();
+            set.spawn_local(async move {
+                use crate::net;
+
+                (lang, net::get_bytes(loc).await.ok())
+            });
+        }
+    }
+    while !set.is_empty() {
+        match set.try_join_next() {
+            Some(val) => match val {
+                Ok((lang, contents)) => {
+                    if let Some(bytes) = contents {
+                        result.insert(lang, FontData::from_owned(bytes.to_vec()));
+                    }
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]

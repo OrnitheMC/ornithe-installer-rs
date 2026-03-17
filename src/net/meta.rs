@@ -10,7 +10,7 @@ use super::GameSide;
 const META_URL: &str = "https://meta.ornithemc.net";
 
 #[allow(dead_code)]
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct LoaderVersion {
     pub version: String,
     stable: bool,
@@ -29,7 +29,7 @@ impl LoaderVersion {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum LoaderType {
     Fabric,
     Quilt,
@@ -86,18 +86,14 @@ pub async fn fetch_launch_json(
             .replacen("{}", &format!("gen{}", g), 1),
         None => &side.launch_json_endpoint().to_string(),
     };
-    let mut text = super::CLIENT
-        .get(
-            META_URL.to_owned()
-                + &endpoint
-                    .replacen("{}", loader_type.get_name(), 1)
-                    .replacen("{}", &intermediary.version, 1)
-                    .replacen("{}", &loader_version.version, 1),
-        )
-        .send()
-        .await?
-        .json::<Value>()
-        .await?;
+    let mut text = super::get_json::<Value>(
+        META_URL.to_owned()
+            + &endpoint
+                .replacen("{}", loader_type.get_name(), 1)
+                .replacen("{}", &intermediary.version, 1)
+                .replacen("{}", &loader_version.version, 1),
+    )
+    .await?;
     let version_id = text["id"]
         .as_str()
         .ok_or(InstallerError::from(t!("meta.error.launch_json_no_id")))?
@@ -110,12 +106,9 @@ pub async fn fetch_launch_json(
         Some(g) => format!("/v3/versions/gen{}/libraries/{}", g, &intermediary.version),
         None => format!("/v3/versions/libraries/{}", &intermediary.version),
     };
-    let library_upgrades = super::CLIENT
-        .get(META_URL.to_owned() + &library_upgrades_route)
-        .send()
-        .await?
-        .json::<Vec<ProfileJsonLibrary>>()
-        .await?;
+    let library_upgrades =
+        super::get_json::<Vec<ProfileJsonLibrary>>(META_URL.to_owned() + &library_upgrades_route)
+            .await?;
 
     if let Some(libraries) = text["libraries"].as_array_mut() {
         for lib in &mut *libraries {
@@ -180,13 +173,7 @@ async fn fetch_loader_versions_type(
         LoaderType::Fabric => "fabric-loader",
         LoaderType::Quilt => "quilt-loader",
     };
-    super::CLIENT
-        .get(META_URL.to_owned() + &url)
-        .send()
-        .await?
-        .json::<Vec<LoaderVersion>>()
-        .await
-        .map_err(|e| e.into())
+    super::get_json::<Vec<LoaderVersion>>(META_URL.to_owned() + &url).await
 }
 
 #[allow(dead_code)]
@@ -204,13 +191,7 @@ pub async fn fetch_intermediary_versions(
         Some(g) => format!("/v3/versions/gen{}/intermediary", g),
         None => "/v3/versions/intermediary".to_owned(),
     };
-    let versions = super::CLIENT
-        .get(META_URL.to_owned() + &url)
-        .send()
-        .await?
-        .json::<Vec<IntermediaryVersion>>()
-        .await
-        .map_err(|e| Into::<InstallerError>::into(e))?;
+    let versions = super::get_json::<Vec<IntermediaryVersion>>(META_URL.to_owned() + &url).await?;
     let mut out = HashMap::with_capacity(versions.len());
     for ver in versions {
         out.insert(ver.version.clone(), ver);
@@ -219,13 +200,13 @@ pub async fn fetch_intermediary_versions(
 }
 
 #[allow(dead_code)]
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct ProfileJson {
     id: String,
     libraries: Vec<ProfileJsonLibrary>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct ProfileJsonLibrary {
     pub name: String,
     pub url: String,
@@ -239,17 +220,11 @@ pub async fn fetch_profile_libraries(
         Some(g) => format!("/v3/versions/gen{}/libraries/{}", g, version),
         None => format!("/v3/versions/libraries/{}", version),
     };
-    let library_upgrades = super::CLIENT
-        .get(META_URL.to_owned() + &url)
-        .send()
-        .await?
-        .json::<Vec<ProfileJsonLibrary>>()
-        .await?;
 
-    Ok(library_upgrades)
+    super::get_json::<Vec<ProfileJsonLibrary>>(META_URL.to_owned() + &url).await
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct IntermediaryGenerations {
     #[serde(rename(deserialize = "latestIntermediaryGeneration"))]
     pub latest: u32,
@@ -258,11 +233,8 @@ pub struct IntermediaryGenerations {
 }
 
 pub async fn fetch_intermediary_generations() -> Result<IntermediaryGenerations, InstallerError> {
-    let generations = super::CLIENT
-        .get(META_URL.to_owned() + "/v3/versions/intermediary_generations")
-        .send()
-        .await?
-        .json::<IntermediaryGenerations>()
-        .await?;
-    Ok(generations)
+    super::get_json::<IntermediaryGenerations>(
+        META_URL.to_owned() + "/v3/versions/intermediary_generations",
+    )
+    .await
 }

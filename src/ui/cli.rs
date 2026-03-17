@@ -178,7 +178,11 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
 
     let (send, mut recv) = unbounded_channel();
 
-    let fut = tokio::spawn(do_install(send, matches));
+    let task = do_install(send, matches);
+    #[cfg(not(target_arch = "wasm32"))]
+    let fut = tokio::spawn(task);
+    #[cfg(target_arch = "wasm32")]
+    let fut = tokio::task::spawn_local(task);
     let pb = ProgressBar::new(100).with_style(
         ProgressStyle::with_template("[{wide_bar:.green/cyan}] [{percent}%] ")
             .unwrap()

@@ -1,6 +1,5 @@
 use std::{fs::File, io::Write, path::PathBuf};
 
-use arboard::Clipboard;
 use serde_json::{Value, json};
 use tokio::sync::mpsc::UnboundedSender;
 use zip::{ZipWriter, write::SimpleFileOptions};
@@ -242,13 +241,28 @@ pub async fn install(
 
     #[cfg(all(
         any(unix, target_os = "windows"),
-        not(any(target_os = "android", target_os = "emscripten"))
+        not(any(target_os = "android", target_arch = "wasm32"))
     ))]
     {
         if copy_profile_path {
-            Clipboard::new()
+            arboard::Clipboard::new()
                 .and_then(|mut cp| cp.set().text(output_file.to_string_lossy().into_owned()))
                 .map_err(|_| InstallerError::from(t!("mmc.error.failed_to_copy_path")))?;
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        if copy_profile_path {
+            if let Some(window) = web_sys::window() {
+                let navigator = window.navigator();
+                wasm_bindgen_futures::JsFuture::from(
+                    navigator
+                        .clipboard()
+                        .write_text(&output_file.to_string_lossy()),
+                )
+                .await
+                .map_err(|_| InstallerError::from(t!("mmc.error.failed_to_copy_path")))?;
+            }
         }
     }
 

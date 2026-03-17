@@ -168,7 +168,11 @@ async fn install_path(
         }
 
         let dir = library_dir.clone();
-        library_files.spawn(async move { download_library(&dir, name, url).await });
+        let fut = async move { download_library(&dir, name, url).await };
+        #[cfg(target_arch = "wasm32")]
+        library_files.spawn_local(fut);
+        #[cfg(not(target_arch = "wasm32"))]
+        library_files.spawn(fut);
     }
 
     let flap_path = if include_flap {
@@ -182,10 +186,14 @@ async fn install_path(
     };
     if include_flap {
         let out_path = flap_path.as_ref().unwrap().clone();
-        library_files.spawn(async move {
+        let fut = async move {
             maven::download_latest_release("flap", &out_path).await?;
             Ok(out_path)
-        });
+        };
+        #[cfg(target_arch = "wasm32")]
+        library_files.spawn_local(fut);
+        #[cfg(not(target_arch = "wasm32"))]
+        library_files.spawn(fut);
         lib_count += 1;
     }
 

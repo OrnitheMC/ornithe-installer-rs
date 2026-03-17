@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::{
     errors::InstallerError,
-    net::{CLIENT, download_file},
+    net::{download_file, get_json},
 };
 
 pub const MAVEN_URL: &str = "https://maven.ornithemc.net/releases/";
@@ -13,7 +13,7 @@ const MAVEN_LATEST_VERSION_API_URL: &str =
 const MAVEN_LATEST_RELEASE_API_URL: &str =
     "https://maven.ornithemc.net/api/maven/latest/file/releases/net/ornithemc/";
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct MavenVersion {
     #[serde(rename(deserialize = "isSnapshot"))]
     #[allow(unused)]
@@ -22,12 +22,7 @@ pub struct MavenVersion {
 }
 
 pub async fn get_latest_version(artifact: &str) -> Result<MavenVersion, InstallerError> {
-    Ok(CLIENT
-        .get(format!("{}{}", MAVEN_LATEST_VERSION_API_URL, artifact))
-        .send()
-        .await?
-        .json::<MavenVersion>()
-        .await?)
+    get_json::<MavenVersion>(format!("{}{}", MAVEN_LATEST_VERSION_API_URL, artifact)).await
 }
 
 pub async fn download_latest_release(
