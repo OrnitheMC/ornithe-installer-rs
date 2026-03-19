@@ -116,12 +116,26 @@ pub async fn run() {
             Ok(res) => match parse(res).await {
                 Ok(r) => {
                     if r == InstallationResult::Installed {
-                        log::info!("Installation complete!");
-                        log::info!("Ornithe has been successfully installed.");
-                        log::info!(
-                            "Most mods require that you also download the Ornithe Standard Libraries mod and place it in your mods folder."
-                        );
-                        log::info!("You can find it at {}", crate::OSL_MODRINTH_URL);
+                        log::info!("Installation complete!
+                            Ornithe has been successfully installed.
+                            Most mods require that you also download the Ornithe Standard Libraries mod and place it in your mods folder.
+                            You can find it at {}.", crate::OSL_MODRINTH_URL);
+                        let window = web_sys::window().expect("Window not available");
+                        let document = window.document().expect("Document not available");
+                        if let Some(element) = document.get_element_by_id("loading_text") {
+                            element.set_inner_html(&format!(
+                            "<h3>Installation complete!</h3>
+                            <p>
+                            Ornithe has been successfully installed.
+                            <br>
+                            Most mods require that you also download the Ornithe Standard Libraries mod and place it in your mods folder.
+                            <br>
+                            You can find it at <a href=\"{}\">{}</a>
+                            </p>",
+                            crate::OSL_MODRINTH_URL,
+                            crate::OSL_MODRINTH_URL
+                        ));
+                        }
                     }
                 }
                 Err(e) => {
@@ -255,17 +269,28 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         let fut = do_install(send, matches);
 
         let mut pinned = std::pin::pin!(fut);
+        let window = web_sys::window().expect("Window not available");
+        let document = window.document().expect("Document not available");
+        let loading_status = document.get_element_by_id("loading_status").unwrap();
+        loading_status.set_inner_html("<p id=\"cli_status_progress\"></p><p id=\"cli_status_message\">Starting Installation</p>");
+        let status_progress = document.get_element_by_id("cli_status_progress").unwrap();
+        let status_message = document.get_element_by_id("cli_status_message").unwrap();
         loop {
             tokio::select! {
-                biased;
+            biased;
                 Some((progress, status)) = recv.recv() => {
-            log::info!("{} - {}", (progress * 100.0) as i32, status);
-                        }
-                        res = pinned.as_mut() => {
-                            return res;
-                        },
-
+                    log::info!("{} - {}", (progress * 100.0) as i32, status);
+                    status_progress.set_inner_html(&format!("{}%", (progress * 100.0) as i32));
+                    if !status.is_empty() {
+                         status_message.set_inner_html(&status);
                     }
+
+                }
+                res = pinned.as_mut() => {
+                        return res;
+                    },
+
+            }
         }
     }
 

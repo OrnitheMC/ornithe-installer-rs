@@ -46,8 +46,14 @@ pub async fn install(
     )
     .await?;
 
-    let _ = sender.send((
-        1.0,
+    let message = if cfg!(target_arch = "wasm32") {
+        t!(
+            "server.info.installed_web",
+            version = version.id,
+            loader = loader_type.get_localized_name(),
+            loader_version = loader_version.version,
+        )
+    } else {
         t!(
             "server.info.installed",
             version = version.id,
@@ -55,8 +61,8 @@ pub async fn install(
             loader_version = loader_version.version,
             destination = location.display()
         )
-        .into(),
-    ));
+    };
+    let _ = sender.send((1.0, message.into()));
 
     Ok(())
 }
@@ -77,8 +83,14 @@ async fn install_path(
         std::fs::create_dir_all(&location)?;
     }
 
-    let _ = sender.send((
-        0.1,
+    let message = if cfg!(target_arch = "wasm32") {
+        t!(
+            "server.info.starting_installation_web",
+            version = version.id,
+            loader = loader_type.get_localized_name(),
+            loader_version = loader_version.version,
+        )
+    } else {
         t!(
             "server.info.starting_installation",
             version = version.id,
@@ -86,8 +98,8 @@ async fn install_path(
             loader_version = loader_version.version,
             destination = location.display()
         )
-        .into(),
-    ));
+    };
+    let _ = sender.send((0.1, message.into()));
     #[cfg(not(target_arch = "wasm32"))]
     let location = location.canonicalize()?;
 

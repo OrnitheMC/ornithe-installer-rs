@@ -31,8 +31,14 @@ pub async fn install(
     generation: Option<u32>,
     include_flap: bool,
 ) -> Result<(), InstallerError> {
-    let _ = sender.send((
-        0.1,
+    let message = if cfg!(target_arch = "wasm32") {
+        t!(
+            "mmc.info.starting_installation_web",
+            version = version.id,
+            loader = loader_type.get_localized_name(),
+            loader_version = loader_version.version
+        )
+    } else {
         t!(
             "mmc.info.starting_installation",
             version = version.id,
@@ -40,8 +46,8 @@ pub async fn install(
             loader_version = loader_version.version,
             destination = output_dir.display()
         )
-        .into(),
-    ));
+    };
+    let _ = sender.send((0.1, message.into()));
 
     #[cfg(not(target_arch = "wasm32"))]
     if !output_dir.exists() {

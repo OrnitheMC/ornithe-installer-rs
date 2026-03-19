@@ -32,8 +32,14 @@ pub async fn install(
             dir = location.to_string_lossy()
         )));
     }
-    let _ = sender.send((
-        0.2,
+    let message = if cfg!(target_arch = "wasm32") {
+        t!(
+            "client.info.installation_start_web",
+            version = version.id,
+            loader = loader_type.get_localized_name(),
+            loader_version = loader_version.version
+        )
+    } else {
         t!(
             "client.info.installation_start",
             version = version.id,
@@ -41,8 +47,8 @@ pub async fn install(
             loader_version = loader_version.version,
             destination = location.display()
         )
-        .into(),
-    ));
+    };
+    let _ = sender.send((0.2, message.into()));
 
     let calamus_gen = match generation {
         Some(g) => g,
