@@ -40,7 +40,7 @@ pub fn dot_minecraft_location() -> String {
     location(mc_dir, "/")
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 pub fn dot_minecraft_location() -> String {
     let appdata = std::env::var("APPDATA").ok();
     location(appdata.map(|p| PathBuf::from(p).join(".minecraft")), r"C:\")
@@ -56,7 +56,7 @@ pub fn dot_minecraft_location() -> String {
 
 #[cfg(target_arch = "wasm32")]
 pub fn dot_minecraft_location() -> String {
-    String::new()
+    ".".to_owned()
 }
 
 #[allow(unused)]
@@ -75,14 +75,14 @@ pub fn current_location() -> String {
     current_dir("/")
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 pub fn current_location() -> String {
     current_dir(r"C:\")
 }
 
 #[cfg(target_arch = "wasm32")]
 pub fn current_location() -> String {
-    String::new()
+    ".".to_owned()
 }
 
 #[allow(unused)]
@@ -102,12 +102,12 @@ pub fn server_location() -> String {
     server_dir("/")
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 pub fn server_location() -> String {
     server_dir(r"C:\")
 }
 
 #[cfg(target_arch = "wasm32")]
 pub fn server_location() -> String {
-    String::new()
+    ".".to_owned()
 }

@@ -15,33 +15,20 @@ i18n!("locales", fallback = "en", minify_key = true);
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen(main)]
 fn main() {
-    main0();
+    #[cfg(feature = "gui")]
+    eframe::web::PanicHandler::install();
+    console_log::init().expect("Failed to setup logger!");
+    console_error_panic_hook::set_once();
+    wasm_bindgen_futures::spawn_local(start_installer());
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn main() {
-    main0();
-}
-
-fn main0() {
-    #[cfg(target_arch = "wasm32")]
-    {
-        #[cfg(feature = "gui")]
-        eframe::web::PanicHandler::install();
-        console_log::init().expect("Failed to setup logger!");
-        wasm_bindgen_futures::spawn_local(start_installer());
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        env_logger::init_from_env(
-            env_logger::Env::default().default_filter_or("ornithe_installer_rs=info"),
-        );
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(start_installer());
-    }
+#[tokio::main]
+async fn main() {
+    env_logger::init_from_env(
+        env_logger::Env::default().default_filter_or("ornithe_installer_rs=info"),
+    );
+    start_installer().await;
 }
 
 async fn start_installer() {
@@ -51,14 +38,25 @@ async fn start_installer() {
 
     // The first argument is the binary name
     #[cfg(feature = "gui")]
-    if std::env::args().count() <= 1 {
-        #[cfg(windows)]
-        hide_console_ng::hide_console();
-        if let Ok(_) = crate::ui::gui::run().await {
-            return;
+    {
+        #[cfg(target_arch = "wasm32")]
+        let gui = web_sys::window()
+            .expect("Window not available")
+            .location()
+            .search()
+            .unwrap_or(String::new())
+            .is_empty();
+        #[cfg(not(target_arch = "wasm32"))]
+        let gui = std::env::args().count() <= 1;
+        if gui {
+            #[cfg(windows)]
+            hide_console_ng::hide_console();
+            if let Ok(_) = crate::ui::gui::run().await {
+                return;
+            }
+            #[cfg(windows)]
+            hide_console_ng::show_unconditionally();
         }
-        #[cfg(windows)]
-        hide_console_ng::show_unconditionally();
     }
 
     crate::ui::cli::run().await

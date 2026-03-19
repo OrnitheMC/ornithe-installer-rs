@@ -1,6 +1,7 @@
-use std::{collections::HashMap, path::PathBuf, time::Duration};
+use std::{collections::HashMap, path::PathBuf};
 
 use clap::{ArgMatches, Command, arg, command, value_parser};
+#[cfg(not(target_arch = "wasm32"))]
 use indicatif::{ProgressBar, ProgressStyle};
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
@@ -20,7 +21,7 @@ enum InstallationResult {
 }
 
 pub async fn run() {
-    let matches = command!()
+    let command = command!()
         .arg_required_else_help(true)
         .name("Ornithe Installer")
         .subcommand(
@@ -64,7 +65,10 @@ pub async fn run() {
                         .default_value(super::server_location())
                         .value_parser(value_parser!(PathBuf)),
                 )
-                .arg(arg!(--"download-minecraft" "Whether to download the minecraft server jar"))
+                .arg(arg!(--"download-minecraft" "Whether to download the minecraft server jar")
+                    .alias("download-server")
+                    .alias("download")
+                )
                 .subcommand(Command::new("run").about("Install and run the server")
                     .arg(arg!(--args <ARGS> "Java arguments to pass to the server (before the server jar)"))
                     .arg(arg!(--java <PATH> "The java binary to use to run the server").value_parser(value_parser!(PathBuf))
@@ -94,9 +98,48 @@ pub async fn run() {
         .subcommand(Command::new("intermediary-generations")
         .long_flag("intermediary-generations")
         .about("List the latest & stable intermediary (Calamus) generations")
-    ).get_matches();
+    );
 
-    match parse(matches).await {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let location = web_sys::window().expect("Window not available").location();
+        let query = location.search().unwrap_or(String::new());
+        let query_presplit = format!("--{}", query[1..].replace("&", " --").replace("=", " "));
+        let query_cleaned = query_presplit.split(" ").collect::<Vec<&str>>();
+        let res = command
+            .no_binary_name(true)
+            .bin_name("ornithe-installer-rs")
+            .color(clap::ColorChoice::Never)
+            .try_get_matches_from(query_cleaned);
+
+        match res {
+            Ok(res) => match parse(res).await {
+                Ok(r) => {
+                    if r == InstallationResult::Installed {
+                        log::info!("Installation complete!");
+                        log::info!("Ornithe has been successfully installed.");
+                        log::info!(
+                            "Most mods require that you also download the Ornithe Standard Libraries mod and place it in your mods folder."
+                        );
+                        log::info!("You can find it at {}", crate::OSL_MODRINTH_URL);
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Error while running Ornithe Installer CLI: {}", &e.0);
+                }
+            },
+            Err(error) => {
+                if error.use_stderr() {
+                    log::error!("{}", error.render());
+                } else {
+                    log::info!("{}", error.render());
+                }
+            }
+        };
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    match parse(command.get_matches()).await {
         Ok(r) => {
             if r == InstallationResult::Installed {
                 println!("Installation complete!");
@@ -116,8 +159,18 @@ pub async fn run() {
 async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError> {
     if let Some(_) = matches.subcommand_matches("intermediary-generations") {
         let generations = crate::net::meta::fetch_intermediary_generations().await?;
-        println!("Latest Generation: {}", generations.latest);
-        println!("Stable Generation: {}", generations.stable);
+        let line1 = format!("Latest Generation: {}", generations.latest);
+        let line2 = format!("Stable Generation: {}", generations.stable);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            println!("{}", line1);
+            println!("{}", line2);
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            log::info!("{}", line1);
+            log::info!("{}", line2);
+        }
         return Ok(InstallationResult::NotInstalled);
     }
     if let Some(matches) = matches.subcommand_matches("loader-versions") {
@@ -132,7 +185,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
                 out += &(version.version.clone() + " ");
             }
         }
-        println!(
+        let line1 = format!(
             "Latest {} Loader version: {}",
             loader_type.get_localized_name(),
             versions
@@ -141,11 +194,22 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
                 .map(|v| v.version.clone())
                 .unwrap_or("<not available>".to_owned())
         );
-        println!(
+        let line2 = format!(
             "Available {} Loader versions:",
             loader_type.get_localized_name()
         );
-        println!("{}", out);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            println!("{}", line1);
+            println!("{}", line2);
+            println!("{}", out);
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            log::info!("{}", line1);
+            log::info!("{}", line2);
+            log::info!("{}", out);
+        }
 
         return Ok(InstallationResult::NotInstalled);
     }
@@ -171,37 +235,63 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
                 out += &(version.id.clone() + " ");
             }
         }
-        println!("Available Minecraft versions:\n");
-        println!("{}", out);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            println!("Available Minecraft versions:\n");
+            println!("{}", out);
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            log::info!("Available Minecraft versions:\n");
+            log::info!("{}", out);
+        }
         return Ok(InstallationResult::NotInstalled);
     }
 
     let (send, mut recv) = unbounded_channel();
 
-    let task = do_install(send, matches);
-    #[cfg(not(target_arch = "wasm32"))]
-    let fut = tokio::spawn(task);
     #[cfg(target_arch = "wasm32")]
-    let fut = tokio::task::spawn_local(task);
-    let pb = ProgressBar::new(100).with_style(
-        ProgressStyle::with_template("[{wide_bar:.green/cyan}] [{percent}%] ")
-            .unwrap()
-            .progress_chars("#>-"),
-    );
-    pb.enable_steady_tick(Duration::from_millis(100));
-    pb.set_position(0);
+    {
+        let fut = do_install(send, matches);
 
-    while !fut.is_finished() || !recv.is_empty() {
-        match recv.try_recv() {
-            Ok((prog, msg)) => {
-                pb.println(msg);
-                pb.set_position((prog * 100.0) as u64);
-            }
-            Err(_) => {}
+        let mut pinned = std::pin::pin!(fut);
+        loop {
+            tokio::select! {
+                biased;
+                Some((progress, status)) = recv.recv() => {
+            log::info!("{} - {}", (progress * 100.0) as i32, status);
+                        }
+                        res = pinned.as_mut() => {
+                            return res;
+                        },
+
+                    }
         }
     }
-    pb.finish_and_clear();
-    return fut.await.unwrap();
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let fut = tokio::spawn(do_install(send, matches));
+        let pb = ProgressBar::new(100).with_style(
+            ProgressStyle::with_template("[{wide_bar:.green/cyan}] [{percent}%] ")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+        pb.enable_steady_tick(std::time::Duration::from_millis(100));
+        pb.set_position(0);
+
+        while !fut.is_finished() || !recv.is_empty() {
+            match recv.try_recv() {
+                Ok((prog, msg)) => {
+                    pb.println(msg);
+                    pb.set_position((prog * 100.0) as u64);
+                }
+                Err(_) => {}
+            }
+        }
+        pb.finish_and_clear();
+        return fut.await.unwrap();
+    }
 }
 
 async fn do_install(

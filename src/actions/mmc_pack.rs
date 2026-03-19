@@ -250,7 +250,7 @@ pub async fn install(
     )?;
 
     #[cfg(all(
-        any(unix, target_os = "windows"),
+        any(unix, windows),
         not(any(target_os = "android", target_arch = "wasm32"))
     ))]
     {

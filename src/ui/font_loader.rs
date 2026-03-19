@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 const FONT_LIST: &str = include_str!("../../res/font/fonts.json");
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 const WINDOWS_FONT_PATH: &str = r"C:\Windows\Fonts\";
 #[cfg(target_os = "macos")]
 const MACOS_FONT_PATH: &str = "/System/Library/Fonts/";
@@ -17,7 +17,7 @@ const MACOS_FONT_PATH_SHARED: &str = "/Library/Fonts/";
 
 #[derive(Deserialize)]
 struct SystemFontList {
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     windows: PlatformFonts,
     #[cfg(target_os = "linux")]
     linux: PlatformFonts,
@@ -95,7 +95,7 @@ fn find_system_font() -> HashMap<String, FontData> {
 
     let mut result: HashMap<String, FontData> = HashMap::new();
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         load_fonts_from_paths(&sys_font_list.windows, &[WINDOWS_FONT_PATH], &mut result);
     }
@@ -151,7 +151,7 @@ async fn load_fonts_from_url(
     }*/
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos"))]
 fn load_fonts_from_paths(
     platform_fonts: &PlatformFonts,
     search_paths: &[&str],

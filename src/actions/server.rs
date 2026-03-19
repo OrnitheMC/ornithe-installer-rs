@@ -190,19 +190,33 @@ async fn install_path(
             let group = parts.get(0).unwrap().replace(".", "/");
             let name = parts.get(1).unwrap();
             let version = parts.get(2).unwrap();
-            let dir = format!("libraries/{}/{}/{}/", group, name, version);
+            let dir = format!(
+                "{}/libraries/{}/{}/{}/",
+                location.display(),
+                group,
+                name,
+                version
+            );
             let path = format!(
-                "libraries/{}/{}/{}/{}-{}.jar",
-                group, name, version, name, version
+                "{}/libraries/{}/{}/{}/{}-{}.jar",
+                location.display(),
+                group,
+                name,
+                version,
+                name,
+                version
             );
             let bytes = crate::net::get_bytes_client(
                 &crate::net::UNCONFIGURED_CLIENT,
                 format!(
                     "{}/{}/{}/{}/{}-{}.jar",
                     url.replace(
+                        // libraries.minecraft.net does not send CORS headers.
+                        // This more or less abuses LF's maven as a proxy to central which *hopefully* contains all relevant artifacts.
+                        // .. is there a better way?
                         "https://libraries.minecraft.net",
                         "https://repo.legacyfabric.net/central"
-                    ), // libraries.minecraft.net does not send CORS headers.
+                    ),
                     group,
                     name,
                     version,
@@ -238,10 +252,14 @@ async fn install_path(
     #[cfg(target_arch = "wasm32")]
     if include_flap {
         let bytes = maven::get_latest_release_file("flap").await?;
-        writer.create_dir("libraries/net/ornithemc/flap")?;
+        writer.create_dir(&format!(
+            "{}/libraries/net/ornithemc/flap",
+            location.display()
+        ))?;
         writer.write_file(
             &format!(
-                "libraries/net/ornithemc/flap/flap-{}.jar",
+                "{}/libraries/net/ornithemc/flap/flap-{}.jar",
+                location.display(),
                 flap_version.as_ref().unwrap().version
             ),
             &bytes,
@@ -312,6 +330,7 @@ async fn install_path(
         launch_main_class = read_jar_manifest_attribute(&lib, "Main-Class")?;
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     if !location.exists() {
         std::fs::create_dir_all(&location)?;
     }
