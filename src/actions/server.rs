@@ -8,7 +8,7 @@ use std::{
 };
 
 use serde_json::json;
-use tokio::{sync::mpsc::UnboundedSender, task::JoinSet};
+use tokio::sync::mpsc::UnboundedSender;
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 const SERVER_LAUNCHER_JAR: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ServerLauncher.jar"));
@@ -72,6 +72,7 @@ async fn install_path(
     install_server: bool,
     include_flap: bool,
 ) -> Result<(), InstallerError> {
+    #[cfg(not(target_arch = "wasm32"))]
     if !location.exists() {
         std::fs::create_dir_all(&location)?;
     }
@@ -87,9 +88,12 @@ async fn install_path(
         )
         .into(),
     ));
+    #[cfg(not(target_arch = "wasm32"))]
     let location = location.canonicalize()?;
 
+    #[cfg(not(target_arch = "wasm32"))]
     let clear_paths = [location.join(".fabric"), location.join(".quilt")];
+    #[cfg(not(target_arch = "wasm32"))]
     for path in clear_paths {
         if path.exists() {
             std::fs::remove_dir_all(&path)?;
@@ -148,11 +152,18 @@ async fn install_path(
         .as_array()
         .ok_or(InstallerError::from(t!("server.error.no_libraries")))?;
 
-    let mut library_files = JoinSet::new();
-
+    #[cfg(not(target_arch = "wasm32"))]
+    let mut library_files = tokio::task::JoinSet::new();
+    #[cfg(not(target_arch = "wasm32"))]
+    let mut lib_count = libraries.len();
+    #[cfg(target_arch = "wasm32")]
+    let mut w = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    #[cfg(target_arch = "wasm32")]
+    let mut writer: Box<&mut dyn super::Writer> = Box::new(&mut w);
     let mut fabric_loader_artifact = None;
     let library_dir = location.join("libraries");
-    let mut lib_count = libraries.len();
+
+    let mut downloaded_library_files = Vec::new();
     for library in libraries {
         let name = library["name"]
             .as_str()
@@ -167,70 +178,122 @@ async fn install_path(
             fabric_loader_artifact = Some(name.clone());
         }
 
-        let dir = library_dir.clone();
-        let fut = async move { download_library(&dir, name, url).await };
-        #[cfg(target_arch = "wasm32")]
-        library_files.spawn_local(fut);
         #[cfg(not(target_arch = "wasm32"))]
-        library_files.spawn(fut);
+        {
+            let dir = library_dir.clone();
+            let fut = async move { download_library(&dir, name, url).await };
+            library_files.spawn(fut);
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let parts = name.splitn(3, ":").collect::<Vec<&str>>();
+            let group = parts.get(0).unwrap().replace(".", "/");
+            let name = parts.get(1).unwrap();
+            let version = parts.get(2).unwrap();
+            let dir = format!("libraries/{}/{}/{}/", group, name, version);
+            let path = format!(
+                "libraries/{}/{}/{}/{}-{}.jar",
+                group, name, version, name, version
+            );
+            let bytes = crate::net::get_bytes_client(
+                &crate::net::UNCONFIGURED_CLIENT,
+                format!(
+                    "{}/{}/{}/{}/{}-{}.jar",
+                    url.replace(
+                        "https://libraries.minecraft.net",
+                        "https://repo.legacyfabric.net/central"
+                    ), // libraries.minecraft.net does not send CORS headers.
+                    group,
+                    name,
+                    version,
+                    name,
+                    version
+                )
+                .replace("//", "/"),
+            )
+            .await?;
+            writer.create_dir(&dir)?;
+            writer.write_file(&path, &bytes)?;
+            downloaded_library_files.push(Path::new(&path).to_path_buf());
+            let _ = sender.send((
+                (downloaded_library_files.len() as f32 / libraries.len() as f32) / 2.0 + 0.2,
+                String::new(),
+            ));
+        }
     }
 
+    let flap_version = if include_flap {
+        Some(maven::get_latest_version("flap").await?)
+    } else {
+        None
+    };
     let flap_path = if include_flap {
-        let flap_version = maven::get_latest_version("flap").await?;
         Some(library_dir.join(format!(
             "net/ornithemc/flap/flap-{}.jar",
-            flap_version.version
+            flap_version.as_ref().unwrap().version
         )))
     } else {
         None
     };
+    #[cfg(target_arch = "wasm32")]
     if include_flap {
-        let out_path = flap_path.as_ref().unwrap().clone();
-        let fut = async move {
-            maven::download_latest_release("flap", &out_path).await?;
-            Ok(out_path)
-        };
-        #[cfg(target_arch = "wasm32")]
-        library_files.spawn_local(fut);
-        #[cfg(not(target_arch = "wasm32"))]
-        library_files.spawn(fut);
-        lib_count += 1;
+        let bytes = maven::get_latest_release_file("flap").await?;
+        writer.create_dir("libraries/net/ornithemc/flap")?;
+        writer.write_file(
+            &format!(
+                "libraries/net/ornithemc/flap/flap-{}.jar",
+                flap_version.as_ref().unwrap().version
+            ),
+            &bytes,
+        )?;
+        downloaded_library_files.push(flap_path.as_ref().unwrap().clone());
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if include_flap {
+            let out_path = flap_path.as_ref().unwrap().clone();
+            let fut = async move {
+                maven::download_latest_release("flap", &out_path).await?;
+                Ok(out_path)
+            };
+            library_files.spawn(fut);
+            lib_count += 1;
+        }
 
-    let mut downloaded_library_files = Vec::new();
-    while let Some(done) = library_files.join_next().await {
-        match done {
-            Ok(res) => match res {
-                Ok(file) => {
-                    let name = file
-                        .file_name()
-                        .map(|o| o.to_string_lossy().to_string())
-                        .unwrap_or("??.jar".to_string());
-                    downloaded_library_files.push(file);
-                    let num = downloaded_library_files.len();
-                    let _ = sender.send((
-                        (num as f32 / lib_count as f32) / 2.0 + 0.2,
-                        t!(
-                            "server.info.downloaded_library",
-                            name = name,
-                            num = num,
-                            lib_count = lib_count
-                        )
-                        .into(),
-                    ));
-                }
+        while let Some(done) = library_files.join_next().await {
+            match done {
+                Ok(res) => match res {
+                    Ok(file) => {
+                        let name = file
+                            .file_name()
+                            .map(|o| o.to_string_lossy().to_string())
+                            .unwrap_or("??.jar".to_string());
+                        downloaded_library_files.push(file);
+                        let num = downloaded_library_files.len();
+                        let _ = sender.send((
+                            (num as f32 / lib_count as f32) / 2.0 + 0.2,
+                            t!(
+                                "server.info.downloaded_library",
+                                name = name,
+                                num = num,
+                                lib_count = lib_count
+                            )
+                            .into(),
+                        ));
+                    }
+                    Err(e) => {
+                        return Err(InstallerError::from(t!(
+                            "server.error.library_failed",
+                            error = e.0
+                        )));
+                    }
+                },
                 Err(e) => {
                     return Err(InstallerError::from(t!(
-                        "server.error.library_failed",
-                        error = e.0
+                        "server.error.libraries_failed",
+                        error = e.to_string()
                     )));
                 }
-            },
-            Err(e) => {
-                return Err(InstallerError::from(t!(
-                    "server.error.libraries_failed",
-                    error = e.to_string()
-                )));
             }
         }
     }
@@ -262,6 +325,8 @@ async fn install_path(
         &downloaded_library_files,
         jvm_args,
         flap_path.as_deref(),
+        #[cfg(target_arch = "wasm32")]
+        &mut writer,
     )
     .await?;
 
@@ -270,7 +335,33 @@ async fn install_path(
         let url = version
             .get_jar_download_url(&crate::net::GameSide::Server)
             .await?;
+        #[cfg(target_arch = "wasm32")]
+        {
+            let bytes =
+                crate::net::get_bytes_client(&crate::net::UNCONFIGURED_CLIENT, url.url).await?;
+            writer.write_file("server.jar", &bytes)?;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
         crate::net::download_file(&url.url, &location.join("server.jar")).await?;
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        let calamus_gen = match generation {
+            Some(g) => g,
+            None => {
+                &crate::net::meta::fetch_intermediary_generations()
+                    .await?
+                    .stable
+            }
+        };
+        let name = format!(
+            "ornithe-gen{calamus_gen}-{}-{}-server.zip",
+            loader_type.get_name(),
+            version.id
+        );
+        drop(writer);
+        super::download_file(name, &w.finish()?.into_inner());
     }
 
     Ok(())
@@ -285,14 +376,22 @@ async fn create_launch_jar(
     library_files: &Vec<PathBuf>,
     jvm_args: Vec<String>,
     flap_jar_path: Option<&Path>,
+    #[cfg(target_arch = "wasm32")] writer: &mut Box<&mut dyn super::Writer>,
 ) -> Result<(), InstallerError> {
+    #[cfg(not(target_arch = "wasm32"))]
     let jar_out = install_location.join(loader_type.get_name().to_owned() + "-server-launch.jar");
+    #[cfg(not(target_arch = "wasm32"))]
     if jar_out.exists() {
         std::fs::remove_file(&jar_out)?;
     }
-
+    #[cfg(not(target_arch = "wasm32"))]
     let file = std::fs::File::create(jar_out)?;
+    #[cfg(not(target_arch = "wasm32"))]
     let mut zip = ZipWriter::new(file);
+    #[cfg(target_arch = "wasm32")]
+    let mut buf = Cursor::new(Vec::new());
+    #[cfg(target_arch = "wasm32")]
+    let mut zip = ZipWriter::new(&mut buf);
     let mut launch_jar = ZipArchive::new(Cursor::new(SERVER_LAUNCHER_JAR))?;
     let mut manifest = Vec::new();
     for i in 0..launch_jar.len() {
@@ -355,6 +454,14 @@ async fn create_launch_jar(
 
     zip.finish()?;
 
+    #[cfg(target_arch = "wasm32")]
+    {
+        writer.write_file(
+            &format!("{}-server-launch.jar", loader_type.get_name()),
+            &buf.into_inner(),
+        )?;
+    }
+
     Ok(())
 }
 
@@ -401,6 +508,7 @@ fn read_jar_manifest_attribute(
     )))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn download_library(
     libraries_dir: &PathBuf,
     name: String,

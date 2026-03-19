@@ -1,5 +1,4 @@
-use std::path::PathBuf;
-
+use reqwest::Client;
 use serde::de::DeserializeOwned;
 
 use crate::errors::InstallerError;
@@ -14,8 +13,12 @@ static CLIENT: std::sync::LazyLock<reqwest::Client> = std::sync::LazyLock::new(|
         .build()
         .unwrap()
 });
+#[cfg(target_arch = "wasm32")]
+pub static UNCONFIGURED_CLIENT: std::sync::LazyLock<reqwest::Client> =
+    std::sync::LazyLock::new(|| reqwest::Client::builder().build().unwrap());
 
-pub async fn download_file(url: &str, output: &PathBuf) -> Result<(), InstallerError> {
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn download_file(url: &str, output: &std::path::PathBuf) -> Result<(), InstallerError> {
     let bytes = get_bytes(url).await?;
     if let Some(parent) = output.parent() {
         if !std::fs::exists(parent)? {
@@ -34,15 +37,40 @@ pub async fn get_json<T>(url: impl Into<String>) -> Result<T, InstallerError>
 where
     T: DeserializeOwned,
 {
-    Ok(CLIENT.get(url.into()).send().await?.json::<T>().await?)
+    get_json_client(&CLIENT, url).await
 }
 
+pub async fn get_json_client<T>(
+    client: &Client,
+    url: impl Into<String>,
+) -> Result<T, InstallerError>
+where
+    T: DeserializeOwned,
+{
+    Ok(client.get(url.into()).send().await?.json::<T>().await?)
+}
+
+#[allow(unused)]
 pub async fn get_text(url: impl Into<String>) -> Result<String, InstallerError> {
-    Ok(CLIENT.get(url.into()).send().await?.text().await?)
+    get_text_client(&CLIENT, url).await
+}
+
+pub async fn get_text_client(
+    client: &Client,
+    url: impl Into<String>,
+) -> Result<String, InstallerError> {
+    Ok(client.get(url.into()).send().await?.text().await?)
 }
 
 pub async fn get_bytes(url: impl Into<String>) -> Result<Vec<u8>, InstallerError> {
-    Ok(CLIENT.get(url.into()).send().await?.bytes().await?.to_vec())
+    get_bytes_client(&CLIENT, url).await
+}
+
+pub async fn get_bytes_client(
+    client: &Client,
+    url: impl Into<String>,
+) -> Result<Vec<u8>, InstallerError> {
+    Ok(client.get(url.into()).send().await?.bytes().await?.to_vec())
 }
 
 pub enum GameSide {

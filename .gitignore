@@ -4,3 +4,5 @@
 build/
 out/
 dist/
+node_modules/
+public/

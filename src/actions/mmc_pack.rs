@@ -1,8 +1,8 @@
-use std::{fs::File, io::Write, path::PathBuf};
+use std::path::PathBuf;
 
 use serde_json::{Value, json};
 use tokio::sync::mpsc::UnboundedSender;
-use zip::{ZipWriter, write::SimpleFileOptions};
+use zip::ZipWriter;
 
 use crate::{
     errors::InstallerError,
@@ -42,9 +42,12 @@ pub async fn install(
         )
         .into(),
     ));
+
+    #[cfg(not(target_arch = "wasm32"))]
     if !output_dir.exists() {
         std::fs::create_dir_all(&output_dir)?;
     }
+    #[cfg(not(target_arch = "wasm32"))]
     let output_dir = output_dir.canonicalize()?;
 
     let _ = sender.send((0.2, t!("mmc.info.fetching_version_information").into()));
@@ -127,14 +130,21 @@ pub async fn install(
         .into(),
     ));
 
-    let mut zip: Box<dyn Writer> = if generate_zip {
-        let _ = sender.send((0.65, t!("mmc.info.generating_instance_zip").into()));
+    #[cfg(target_arch = "wasm32")]
+    let mut buf = std::io::Cursor::new(Vec::new());
 
-        if std::fs::exists(&output_file).unwrap_or_default() {
-            std::fs::remove_file(&output_file)?;
+    let mut zip: Box<dyn super::Writer> = if generate_zip {
+        let _ = sender.send((0.65, t!("mmc.info.generating_instance_zip").into()));
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if std::fs::exists(&output_file).unwrap_or_default() {
+                std::fs::remove_file(&output_file)?;
+            }
+            let file = std::fs::File::create_new(&output_file)?;
+            Box::new(ZipWriter::new(file))
         }
-        let file = std::fs::File::create_new(&output_file)?;
-        Box::new(ZipWriter::new(file))
+        #[cfg(target_arch = "wasm32")]
+        Box::new(ZipWriter::new(&mut buf))
     } else {
         let _ = sender.send((0.65, t!("mmc.info.generating_output_files").into()));
 
@@ -267,6 +277,14 @@ pub async fn install(
     }
 
     let _ = sender.send((1.0, t!("mmc.info.done").into()));
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        drop(zip);
+        wasm_bindgen_futures::spawn_local(async move {
+            super::download_file(&(profile_name + ".zip"), &buf.into_inner());
+        });
+    }
 
     Ok(())
 }
@@ -404,36 +422,4 @@ async fn get_mmc_launch_json(
     }
 
     Ok(serde_json::to_string_pretty(&json)?)
-}
-
-trait Writer {
-    fn write_file(&mut self, path: &str, buf: &[u8]) -> Result<(), InstallerError>;
-
-    fn create_dir(&mut self, path: &str) -> Result<(), InstallerError>;
-}
-
-impl Writer for PathBuf {
-    fn write_file(&mut self, path: &str, buf: &[u8]) -> Result<(), InstallerError> {
-        let new_file = self.join(path);
-        let mut file = std::fs::File::create(new_file)?;
-        file.write_all(buf)?;
-        Ok(())
-    }
-
-    fn create_dir(&mut self, path: &str) -> Result<(), InstallerError> {
-        let new_file = self.join(path);
-        std::fs::create_dir_all(new_file)?;
-        Ok(())
-    }
-}
-
-impl Writer for ZipWriter<File> {
-    fn write_file(&mut self, path: &str, buf: &[u8]) -> Result<(), InstallerError> {
-        self.start_file(path, SimpleFileOptions::default())?;
-        Ok(self.write_all(buf)?)
-    }
-
-    fn create_dir(&mut self, path: &str) -> Result<(), InstallerError> {
-        Ok(self.add_directory(path, SimpleFileOptions::default())?)
-    }
 }

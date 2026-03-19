@@ -1,10 +1,8 @@
-use std::path::PathBuf;
-
 use serde::Deserialize;
 
 use crate::{
     errors::InstallerError,
-    net::{download_file, get_json},
+    net::{self, get_json},
 };
 
 pub const MAVEN_URL: &str = "https://maven.ornithemc.net/releases/";
@@ -25,11 +23,16 @@ pub async fn get_latest_version(artifact: &str) -> Result<MavenVersion, Installe
     get_json::<MavenVersion>(format!("{}{}", MAVEN_LATEST_VERSION_API_URL, artifact)).await
 }
 
+pub async fn get_latest_release_file(artifact: &str) -> Result<Vec<u8>, InstallerError> {
+    net::get_bytes(&format!("{}{}", MAVEN_LATEST_RELEASE_API_URL, artifact)).await
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn download_latest_release(
     artifact: &str,
-    output: &PathBuf,
+    output: &std::path::PathBuf,
 ) -> Result<(), InstallerError> {
-    download_file(
+    crate::net::download_file(
         &format!("{}{}", MAVEN_LATEST_RELEASE_API_URL, artifact),
         output,
     )

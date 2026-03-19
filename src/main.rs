@@ -1,14 +1,12 @@
-use log::info;
-
 mod actions;
 mod errors;
 mod net;
 mod ui;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
-static USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
-static ORNITHE_ICON_BYTES: &[u8] = include_bytes!("../res/icon.png");
-const OSL_MODRINTH_URL: &str = "https://modrinth.com/mod/osl";
+pub static VERSION: &str = env!("CARGO_PKG_VERSION");
+pub static USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
+pub static ORNITHE_ICON_BYTES: &[u8] = include_bytes!("../res/icon.png");
+pub const OSL_MODRINTH_URL: &str = "https://modrinth.com/mod/osl";
 
 #[macro_use]
 extern crate rust_i18n;
@@ -28,17 +26,9 @@ fn main() {
 fn main0() {
     #[cfg(target_arch = "wasm32")]
     {
-        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+        #[cfg(feature = "gui")]
+        eframe::web::PanicHandler::install();
         console_log::init().expect("Failed to setup logger!");
-        /*let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        rt.block_on(async move {
-            tokio::task::LocalSet::new()
-                .run_until(start_installer())
-                .await;
-        });*/
         wasm_bindgen_futures::spawn_local(start_installer());
     }
     #[cfg(not(target_arch = "wasm32"))]
@@ -57,7 +47,7 @@ fn main0() {
 async fn start_installer() {
     rust_i18n::set_locale("en");
 
-    info!("Ornithe Installer v{}", VERSION);
+    log::info!("Ornithe Installer v{}", VERSION);
 
     // The first argument is the binary name
     #[cfg(feature = "gui")]

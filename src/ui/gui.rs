@@ -91,10 +91,8 @@ async fn create_window() -> Result<(), InstallerError> {
 
         let web_options = eframe::WebOptions::default();
 
-        let document = web_sys::window()
-            .expect("No window")
-            .document()
-            .expect("No document");
+        let window = web_sys::window().expect("No window");
+        let document = window.document().expect("No document");
 
         let canvas = document
             .get_element_by_id("main_canvas")
@@ -104,7 +102,7 @@ async fn create_window() -> Result<(), InstallerError> {
 
         let start_result = eframe::WebRunner::new()
             .start(
-                canvas,
+                canvas.clone(),
                 web_options,
                 Box::new(|cc| {
                     // load needed system fonts
@@ -225,7 +223,11 @@ impl InstallationProgress {
     }
 
     pub fn is_running(&self) -> bool {
-        self.last_progress < 1.0 && self.task.is_some()
+        if self.last_progress < 1.0 {
+            self.task.is_some()
+        } else {
+            false
+        }
     }
 }
 
@@ -270,9 +272,13 @@ impl InstallationProgress {
         if let Some(ref mut rec) = self.rec() {
             match rec.try_recv() {
                 Ok((progress, message)) => {
-                    info!("{}% - {}", (progress * 100.0) as i32, &message);
+                    if progress <= 1.0 {
+                        info!("{}% - {}", (progress * 100.0) as i32, &message);
+                    }
                     self.last_progress = progress;
-                    self.status.push(message);
+                    if !message.is_empty() {
+                        self.status.push(message);
+                    }
                 }
                 Err(_) => {}
             }
@@ -681,6 +687,7 @@ impl App {
                             sender2
                                 .send((1.1, String::new()))
                                 .expect("failed to finish");
+                            sender2.closed().await;
                             App::post_installation(res);
                         });
                     }
@@ -721,6 +728,7 @@ impl App {
                             sender2
                                 .send((1.1, String::new()))
                                 .expect("failed to finish");
+                            sender2.closed().await;
                             App::post_installation(res);
                         })
                     }
@@ -763,6 +771,7 @@ impl App {
                             sender2
                                 .send((1.1, String::new()))
                                 .expect("failed to finish");
+                            sender2.closed().await;
                             App::post_installation(res);
                         })
                     }
@@ -788,6 +797,8 @@ impl App {
                 while !prog.rec().map(|rec| rec.is_empty()).unwrap_or(false) {
                     prog.poll();
                 }
+                #[cfg(target_arch = "wasm32")]
+                let _ = prog.task.take();
                 #[cfg(not(target_arch = "wasm32"))]
                 {
                     let (_, handle) = prog.task.take().unwrap();
@@ -885,7 +896,7 @@ impl App {
                     bottom: 6,
                 })
                 .corner_radius(8.0)
-                .fill(Color32::LIGHT_GRAY)
+                .fill(ui.visuals().widgets.inactive.bg_fill)
                 .show(ui, |ui| {
                     ScrollArea::vertical()
                         .auto_shrink(Vec2b::FALSE)
@@ -904,14 +915,22 @@ impl App {
                                 .show(ui);
                         });
                 });
-            ProgressBar::new(progress.last_progress)
+            let bar_color = if ui.visuals().dark_mode {
+                Color32::DARK_BLUE
+            } else {
+                Color32::LIGHT_BLUE
+            };
+            ProgressBar::new(progress.last_progress.min(1.0))
                 .desired_width(ui.available_width())
                 .animate(true)
                 .text(
-                    RichText::new(format!("{}%", (progress.last_progress * 100.0) as i32))
-                        .background_color(Color32::LIGHT_BLUE),
+                    RichText::new(format!(
+                        "{}%",
+                        (progress.last_progress * 100.0).min(100.0) as i32
+                    ))
+                    .background_color(bar_color),
                 )
-                .fill(Color32::LIGHT_BLUE)
+                .fill(bar_color)
                 .ui(ui);
         });
         ui.vertical_centered(|ui| {
@@ -968,12 +987,20 @@ impl App {
                 t!("gui.dialog.installation_successful.message"),
                 MessageButtons::YesNo,
                 |res| {
-                    if res == MessageDialogResult::Yes {
-                        if webbrowser::open(crate::OSL_MODRINTH_URL).is_err() {
+                    if res == MessageDialogResult::Yes || res == MessageDialogResult::Ok {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        let err = webbrowser::open(crate::OSL_MODRINTH_URL).is_err();
+                        #[cfg(target_arch = "wasm32")]
+                        let err = web_sys::window()
+                            .unwrap()
+                            .open_with_url_and_target(crate::OSL_MODRINTH_URL, "_blank")
+                            .is_err();
+
+                        if err {
                             display_dialog(
                                 t!("gui.error.failed_to_open_modrinth"),
                                 t!(
-                                    "error.failed_to_open_modrinth.message",
+                                    "gui.error.failed_to_open_modrinth.message",
                                     osl_url = crate::OSL_MODRINTH_URL
                                 ),
                             );
@@ -1000,7 +1027,6 @@ impl eframe::App for App {
                 }
             }
         }
-
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.style_mut().interaction.selectable_labels = false;
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);

@@ -3,7 +3,6 @@ use egui::{
     FontFamily::{Monospace, Proportional},
     epaint::text::{FontInsert, FontPriority::Lowest, InsertFontFamily},
 };
-use log::warn;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -31,33 +30,65 @@ struct SystemFontList {
 type PlatformFonts = HashMap<String, Vec<String>>;
 
 pub fn load_system_font_to_egui(ctx: &egui::Context) {
-    let system_font = find_system_font();
+    #[cfg(target_arch = "wasm32")]
+    {
+        let sys_font_list: SystemFontList =
+            serde_json::from_str(FONT_LIST).expect("failed to parse font list");
+        let c = ctx.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            let mut result: HashMap<String, FontData> = HashMap::new();
+            load_fonts_from_url(&sys_font_list.web, &mut result).await;
+            for font in result {
+                let font_insert = FontInsert::new(
+                    &font.0,
+                    font.1,
+                    vec![
+                        InsertFontFamily {
+                            family: Proportional,
+                            priority: Lowest, // low priority to not override existing fonts
+                        },
+                        InsertFontFamily {
+                            family: Monospace,
+                            priority: Lowest,
+                        },
+                    ],
+                );
 
-    if system_font.is_empty() {
-        warn!("No system font found, some languages may not display properly.");
-        return;
+                c.add_font(font_insert);
+            }
+        });
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let system_font = find_system_font();
 
-    for font in system_font {
-        let font_insert = FontInsert::new(
-            &font.0,
-            font.1,
-            vec![
-                InsertFontFamily {
-                    family: Proportional,
-                    priority: Lowest, // low priority to not override existing fonts
-                },
-                InsertFontFamily {
-                    family: Monospace,
-                    priority: Lowest,
-                },
-            ],
-        );
+        if system_font.is_empty() {
+            log::warn!("No system font found, some languages may not display properly.");
+            return;
+        }
 
-        ctx.add_font(font_insert);
+        for font in system_font {
+            let font_insert = FontInsert::new(
+                &font.0,
+                font.1,
+                vec![
+                    InsertFontFamily {
+                        family: Proportional,
+                        priority: Lowest, // low priority to not override existing fonts
+                    },
+                    InsertFontFamily {
+                        family: Monospace,
+                        priority: Lowest,
+                    },
+                ],
+            );
+
+            ctx.add_font(font_insert);
+        }
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn find_system_font() -> HashMap<String, FontData> {
     let sys_font_list: SystemFontList =
         serde_json::from_str(FONT_LIST).expect("failed to parse font list");
@@ -84,43 +115,40 @@ fn find_system_font() -> HashMap<String, FontData> {
         load_fonts_from_fontconfig(&sys_font_list.linux, &mut result);
     }
 
-    #[cfg(target_arch = "wasm32")]
-    {
-        load_fonts_from_url(&sys_font_list.web, &mut result);
-    }
-
     result
 }
 
 #[cfg(target_arch = "wasm32")]
-fn load_fonts_from_url(platform_fonts: &PlatformFonts, result: &mut HashMap<String, FontData>) {
-    use tokio::task::JoinSet;
-
-    let mut set = JoinSet::new();
+async fn load_fonts_from_url(
+    platform_fonts: &PlatformFonts,
+    result: &mut HashMap<String, FontData>,
+) {
+    let client = reqwest::ClientBuilder::new()
+        .build()
+        .expect("Need to fetch font files");
     for (language, font_urls) in platform_fonts {
         for url in font_urls {
             let loc = url.clone();
             let lang = language.clone();
-            set.spawn_local(async move {
-                use crate::net;
-
-                (lang, net::get_bytes(loc).await.ok())
-            });
-        }
-    }
-    while !set.is_empty() {
-        match set.try_join_next() {
-            Some(val) => match val {
-                Ok((lang, contents)) => {
-                    if let Some(bytes) = contents {
-                        result.insert(lang, FontData::from_owned(bytes.to_vec()));
-                    }
+            if let Ok(res) = client.get(loc).send().await {
+                if let Ok(b) = res.bytes().await {
+                    result.insert(lang, FontData::from_owned(b.to_vec()));
                 }
-                _ => {}
-            },
-            _ => {}
+            }
         }
     }
+    /*let mut recv_count = 0;
+    while recv_count < platform_fonts.len() {
+        match rec.try_recv() {
+            Ok((lang, bytes)) => {
+                if let Some(b) = bytes {
+                    result.insert(lang, FontData::from_owned(b));
+                }
+                recv_count += 1;
+            }
+            Err(_) => {}
+        }
+    }*/
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -166,6 +194,6 @@ fn load_fonts_from_fontconfig(
             }
         })
     } else {
-        warn!("Failed to init Fontconfig")
+        log::warn!("Failed to init Fontconfig")
     }
 }

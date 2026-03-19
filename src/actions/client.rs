@@ -25,6 +25,7 @@ pub async fn install(
     create_profile: bool,
     include_flap: bool,
 ) -> Result<(), InstallerError> {
+    #[cfg(not(target_arch = "wasm32"))]
     if !location.exists() {
         return Err(InstallerError::from(t!(
             "client.error.directory_does_not_exist",
@@ -64,21 +65,39 @@ pub async fn install(
     let _ = sender.send((0.6, t!("client.info.setting_up_destination").into()));
 
     let versions_dir = location.join("versions");
-    let vanilla_profile_dir = versions_dir.join(&vanilla_profile_name);
-    let vanilla_profile_json = vanilla_profile_dir.join(vanilla_profile_name.clone() + ".json");
     let profile_dir = versions_dir.join(&profile_name);
-    let profile_json = profile_dir.join(profile_name.clone() + ".json");
     let flap_jar = profile_dir.join("flap.jar");
 
-    if std::fs::exists(&vanilla_profile_dir).unwrap_or_default() {
-        std::fs::remove_dir_all(&vanilla_profile_dir)?;
-    }
-    if std::fs::exists(&profile_dir).unwrap_or_default() {
-        std::fs::remove_dir_all(&profile_dir)?;
+    let flap_jar_file = if include_flap {
+        Some(maven::get_latest_release_file("flap").await?)
+    } else {
+        None
+    };
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let vanilla_profile_dir = versions_dir.join(&vanilla_profile_name);
+        let profile_dir = versions_dir.join(&profile_name);
+        if std::fs::exists(&vanilla_profile_dir).unwrap_or_default() {
+            std::fs::remove_dir_all(&vanilla_profile_dir)?;
+        }
+        if std::fs::exists(&profile_dir).unwrap_or_default() {
+            std::fs::remove_dir_all(&profile_dir)?;
+        }
     }
 
+    #[cfg(target_arch = "wasm32")]
+    let mut buf = std::io::Cursor::new(Vec::new());
+    #[cfg(target_arch = "wasm32")]
+    let mut writer: Box<dyn super::Writer> = Box::new(zip::ZipWriter::new(&mut buf));
+    #[cfg(not(target_arch = "wasm32"))]
+    let mut writer: Box<dyn super::Writer> = Box::new(versions_dir);
+
     if include_flap {
-        maven::download_latest_release("flap", &flap_jar).await?;
+        writer.write_file(
+            &format!("{}/flap.jar", profile_name),
+            &flap_jar_file.unwrap(),
+        )?;
 
         if let Some(obj) = ornithe_launch_json.as_object_mut() {
             if !obj.contains_key("arguments") {
@@ -103,14 +122,31 @@ pub async fn install(
 
     let _ = sender.send((0.8, t!("client.info.creating_files").into()));
 
-    std::fs::create_dir_all(vanilla_profile_dir)?;
-    std::fs::create_dir_all(profile_dir)?;
+    writer.create_dir(&vanilla_profile_name)?;
+    writer.create_dir(&profile_name)?;
 
-    std::fs::write(vanilla_profile_json, vanilla_launch_json)?;
-    std::fs::write(profile_json, serde_json::to_string(&ornithe_launch_json)?)?;
+    writer.write_file(
+        &format!("{}/{}.json", vanilla_profile_name, vanilla_profile_name),
+        vanilla_launch_json.as_bytes(),
+    )?;
+    writer.write_file(
+        &format!("{}/{}.json", profile_name, profile_name),
+        &serde_json::to_vec(&ornithe_launch_json)?,
+    )?;
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        drop(writer);
+        let name = profile_name.clone() + ".zip";
+        wasm_bindgen_futures::spawn_local(async move {
+            super::download_file(name, &buf.into_inner());
+        });
+    }
 
     if create_profile {
-        update_profiles(location, profile_name, version, loader_type, calamus_gen)?;
+        if cfg!(not(target_arch = "wasm32")) {
+            update_profiles(location, profile_name, version, loader_type, calamus_gen)?;
+        }
     }
 
     let _ = sender.send((1.0, t!("client.info.done").into()));

@@ -15,7 +15,10 @@ pub async fn fetch_versions(generation: &Option<u32>) -> Result<VersionManifest,
         Some(g) => LAUNCHER_META_URL_VERSIONED.replacen("{}", &format!("gen{}", g), 1),
         None => LAUNCHER_META_URL.to_string(),
     };
-    super::get_json::<VersionManifest>(url).await
+    #[cfg(target_arch = "wasm32")]
+    return super::get_json_client::<VersionManifest>(&super::UNCONFIGURED_CLIENT, url).await;
+    #[cfg(not(target_arch = "wasm32"))]
+    return super::get_json::<VersionManifest>(url).await;
 }
 
 pub async fn vanilla_profile_name(
@@ -25,7 +28,7 @@ pub async fn vanilla_profile_name(
     let intermediary_gen = if let Some(g) = generation {
         g
     } else {
-        &meta::fetch_intermediary_generations().await?.latest
+        &meta::fetch_intermediary_generations().await?.stable
     };
     Ok(format!("{}-gen{}", version, intermediary_gen))
 }
@@ -34,6 +37,9 @@ pub async fn fetch_launch_json(
     version: &MinecraftVersion,
     generation: &Option<u32>,
 ) -> Result<(String, String), InstallerError> {
+    #[cfg(target_arch = "wasm32")]
+    let res = super::get_text_client(&super::UNCONFIGURED_CLIENT, &version.url).await;
+    #[cfg(not(target_arch = "wasm32"))]
     let res = super::get_text(&version.url).await;
     let mut json = match res {
         Ok(j) => match serde_json::from_str::<Value>(&j) {
@@ -61,6 +67,10 @@ pub async fn fetch_launch_json(
 async fn fetch_version_details(
     version: &MinecraftVersion,
 ) -> Result<VersionDetails, InstallerError> {
+    #[cfg(target_arch = "wasm32")]
+    return super::get_json_client::<VersionDetails>(&super::UNCONFIGURED_CLIENT, &version.details)
+        .await;
+    #[cfg(not(target_arch = "wasm32"))]
     super::get_json::<VersionDetails>(&version.details).await
 }
 
@@ -151,6 +161,10 @@ pub struct VersionDownload {
 pub async fn find_lwjgl_url_version(
     version: &MinecraftVersion,
 ) -> Result<(String, String), InstallerError> {
+    #[cfg(target_arch = "wasm32")]
+    let details =
+        super::get_json_client::<Value>(&super::UNCONFIGURED_CLIENT, &version.url).await?;
+    #[cfg(not(target_arch = "wasm32"))]
     let details = super::get_json::<Value>(&version.url).await?;
 
     if let Some(libraries) = details["libraries"].as_array() {
