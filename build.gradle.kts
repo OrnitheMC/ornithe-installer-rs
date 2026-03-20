@@ -27,7 +27,7 @@ publishing {
          */
         create<MavenPublication>("mavenCargo") {
             groupId = "net.ornithemc.ornithe-installer-rs"
-            artifactId = "$os"
+            artifactId = "ornithe-installer-rs-$os"
 
             artifact {
                 file(

@@ -24,6 +24,7 @@ pub async fn run() {
     let command = command!()
         .arg_required_else_help(true)
         .name("Ornithe Installer")
+        .after_help("Additional arguments are available for subcommands. See their help pages for details.")
         .subcommand(
             add_arguments(Command::new("client")
                 .about("Client installation for the official launcher")
@@ -79,16 +80,14 @@ pub async fn run() {
             .alias("minecraft-versions")
             .long_flag("list-game-versions")
             .long_flag_alias("list-minecraft-versions")
-            .long_about("List supported game versions.")
-                .about("List supported game versions. Arguments: [--show-snapshots, --show-historical]")
+                .about("List supported game versions.")
                 .arg(arg!(-s --"show-snapshots" "Include snapshot versions"))
                 .arg(arg!(--"show-historical" "Include historical versions")),
         )
         .subcommand(
             add_gen_argument(Command::new("loader-versions")
             .long_flag("list-loader-versions")
-            .long_about("List available loader versions.")
-                .about("List available loader versions. Arguments: [--show-betas, --loader-type]")
+            .about("List available loader versions.")
                 .arg(arg!(-b --"show-betas" "Include beta versions"))
                 .arg(arg!(--"loader-type" <TYPE> "Loader type to use")
                 .default_value("fabric")

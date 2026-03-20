@@ -34,8 +34,6 @@ async fn main() {
 async fn start_installer() {
     rust_i18n::set_locale("en");
 
-    log::info!("Ornithe Installer v{}", VERSION);
-
     // The first argument is the binary name
     #[cfg(feature = "gui")]
     {
@@ -51,6 +49,7 @@ async fn start_installer() {
         if gui {
             #[cfg(windows)]
             hide_console_ng::hide_console();
+            log::info!("Ornithe Installer v{}", VERSION);
             if let Ok(_) = crate::ui::gui::run().await {
                 return;
             }

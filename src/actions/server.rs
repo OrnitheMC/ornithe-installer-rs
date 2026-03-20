@@ -337,8 +337,9 @@ async fn install_path(
         .into(),
     ));
 
-    #[cfg(not(target_arch = "wasm32"))]
-    if let Some(loader) = fabric_loader_artifact {
+    if cfg!(not(target_arch = "wasm32"))
+        && let Some(loader) = fabric_loader_artifact
+    {
         let lib = location.join("libraries").join(split_artifact(&loader));
         launch_main_class = read_jar_manifest_attribute(&lib, "Main-Class")?;
     }
