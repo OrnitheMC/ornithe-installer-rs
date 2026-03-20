@@ -70,7 +70,7 @@
     "server.info.installed":"Встановлено сервер Ornithe для Minecraft %{version} із завантажувачем %{loader} %{loader_version} до %{destination}",
     "server.info.installed_web":"Встановлено сервер Ornithe для Minecraft %{version} із завантажувачем %{loader} %{loader_version}",
     "server.info.starting_installation":"Встановлення сервера Ornithe для Minecraft %{version} із завантажувачем %{loader} %{loader_version} до %{destination}",
-    "server.info.starting_installation_web":"Встановлення сервера Ornithe для Minecraft %{version} із завантажувачем %{loader} %{loader_version}"
+    "server.info.starting_installation_web":"Встановлення сервера Ornithe для Minecraft %{version} із завантажувачем %{loader} %{loader_version}",
     "server.info.installing_libraries":"Встановлення бібліотек",
     "server.info.downloaded_library":"Завантажено %{name}, %{num}/%{lib_count}",
     "server.info.downloaded_libraries":"Завантажено %{lib_count} бібліотек!",
