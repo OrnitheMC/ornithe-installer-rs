@@ -7,7 +7,8 @@
   "type": "commonjs",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "build-release": "vite build --base=https://ornithemc.net/ornithe-installer-rs"
   },
   "dependencies": {
     "file-saver": "^2.0.5"

@@ -6,14 +6,14 @@ export default defineConfig({
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp",
-    }
+    },
   },
   build: {
     rolldownOptions: {
       checks: {
-        pluginTimings: false // cargo can take a moment to build, 3 seconds is a bit tight
-      }
-    }
+        pluginTimings: false, // cargo can take a moment to build, 3 seconds is a bit tight
+      },
+    },
   },
   plugins: [
     {
@@ -37,6 +37,4 @@ export default defineConfig({
       },
     },
   ],
-  // cargo build --target wasm32-wasip1 --release
-  // wasm-bindgen --target web --out-dir $TRUNK_STAGING_DIR target/wasm32-wasip1/release/ornithe-installer-rs.wasm
 });
