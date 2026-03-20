@@ -14,14 +14,14 @@ jobs:
   build_serverlauncher:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: "microsoft"
           java-version: 21
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5.0.0
+        uses: gradle/actions/setup-gradle@v5
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Build
@@ -29,7 +29,7 @@ jobs:
           OUT_DIR: ".."
         run: ./gradlew :java:assemble --stacktrace
       - name: Store built jar
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: serverlauncher
           path: ServerLauncher.jar
@@ -57,9 +57,9 @@ jobs:
             msvc_arch: amd64_arm64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Download jar artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: serverlauncher
       - name: Install C toolchain (Windows)
@@ -85,7 +85,7 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
       - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CI builds (${{ matrix.build }})
           path: |
@@ -98,9 +98,9 @@ jobs:
     runs-on: ubuntu-latest
     container: ghcr.io/rust-cross/cargo-zigbuild:0.20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Download jar artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: serverlauncher
       - name: Install Rust
@@ -115,7 +115,7 @@ jobs:
       - name: Build release binary
         run: cargo zigbuild --release --target universal2-apple-darwin
       - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CI builds (macos)
           path: |
@@ -133,9 +133,9 @@ jobs:
             target: aarch64-unknown-linux-gnu
     runs-on: ubuntu-22.04 # GLIBC version!
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Download jar artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: serverlauncher
       - name: Install Rust
@@ -152,7 +152,7 @@ jobs:
       - name: Build release binary
         run: cross build --release --target ${{ matrix.target }}
       - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CI builds (${{ matrix.build }})
           path: |
@@ -163,9 +163,9 @@ jobs:
     needs: build_serverlauncher
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Download jar artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: serverlauncher
       - name: Install Rust
@@ -181,7 +181,7 @@ jobs:
           cache: "npm"
       - name: Build web target
         run: npm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: github-pages
           path: dist/
