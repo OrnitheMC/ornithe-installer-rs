@@ -159,3 +159,29 @@ jobs:
             target/**/ornithe-installer-rs*
             !target/**/ornithe-installer-rs.d
             !target/**/build/
+  build_web:
+    needs: build_serverlauncher
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download jar artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: serverlauncher
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "latest"
+          cache: "npm"
+      - name: Build web target
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: github-pages
+          path: dist/

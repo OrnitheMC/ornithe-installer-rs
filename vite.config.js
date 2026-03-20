@@ -8,6 +8,13 @@ export default defineConfig({
       "Cross-Origin-Embedder-Policy": "require-corp",
     }
   },
+  build: {
+    rolldownOptions: {
+      checks: {
+        pluginTimings: false // cargo can take a moment to build, 3 seconds is a bit tight
+      }
+    }
+  },
   plugins: [
     {
       name: "cargo-build",

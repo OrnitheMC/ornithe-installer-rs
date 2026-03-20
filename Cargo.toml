@@ -10,7 +10,7 @@ authors = [
 base64 = "0.22.1"
 chrono = { version = "0.4.40", features = ["serde"] }
 clap = { version = "4.5.35", features = ["cargo", "derive", "string"] }
-current_locale = { path = "../../current_locale", optional = true }
+current_locale = { git = "https://github.com/i509VCB/current_locale.git", rev = "refs/pull/10/head", optional = true } # todo. change when it's merged.
 eframe = { version = "0.33.2", features = ["wgpu"], optional = true }
 egui = { version = "0.33.2", optional = true }
 log = "0.4.27"

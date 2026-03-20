@@ -123,32 +123,16 @@ async fn load_fonts_from_url(
     platform_fonts: &PlatformFonts,
     result: &mut HashMap<String, FontData>,
 ) {
-    let client = reqwest::ClientBuilder::new()
-        .build()
-        .expect("Need to fetch font files");
     for (language, font_urls) in platform_fonts {
         for url in font_urls {
             let loc = url.clone();
             let lang = language.clone();
-            if let Ok(res) = client.get(loc).send().await {
-                if let Ok(b) = res.bytes().await {
-                    result.insert(lang, FontData::from_owned(b.to_vec()));
-                }
+            if let Ok(b) = crate::net::get_bytes_client(&crate::net::UNCONFIGURED_CLIENT, loc).await
+            {
+                result.insert(lang, FontData::from_owned(b));
             }
         }
     }
-    /*let mut recv_count = 0;
-    while recv_count < platform_fonts.len() {
-        match rec.try_recv() {
-            Ok((lang, bytes)) => {
-                if let Some(b) = bytes {
-                    result.insert(lang, FontData::from_owned(b));
-                }
-                recv_count += 1;
-            }
-            Err(_) => {}
-        }
-    }*/
 }
 
 #[cfg(any(windows, target_os = "macos"))]

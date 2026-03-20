@@ -1,9 +1,9 @@
 {
   "name": "ornithe-installer-rs-web",
   "version": "1.0.0",
-  "description": "",
+  "description": "Ornithe Installer (Rust/WASM)",
   "license": "APACHE-2.0",
-  "author": "",
+  "author": "moehreag",
   "type": "commonjs",
   "scripts": {
     "dev": "vite",

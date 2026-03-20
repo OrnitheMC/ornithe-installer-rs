@@ -971,6 +971,7 @@ checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 [[package]]
 name = "current_locale"
 version = "0.1.1"
+source = "git+https://github.com/i509VCB/current_locale.git?rev=refs%2Fpull%2F10%2Fhead#8a6a6bb91f051c4c845156b9006758b6d7b23619"
 dependencies = [
  "jni 0.21.1",
  "libc",
