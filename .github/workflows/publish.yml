@@ -274,6 +274,7 @@ jobs:
         with:
           node-version: "latest"
           package-manager-cache: false
+      - run: npm i
       - name: Build web target
         run: npm run build
       - uses: actions/upload-artifact@v7
