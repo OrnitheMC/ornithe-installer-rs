@@ -274,6 +274,8 @@ jobs:
         with:
           node-version: "latest"
           package-manager-cache: false
+      - run: rustup target add wasm32-unknown-unknown
+      - run: cargo install wasm-bindgen-cli
       - run: npm i
       - name: Build web target
         run: npm run build
