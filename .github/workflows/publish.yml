@@ -279,9 +279,9 @@ jobs:
       - run: npm i
       - name: Build web target
         run: npm run build-release
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-pages-artifact@v4
+        id: deployment
         with:
-          name: github-pages
           path: dist/
   publish_web:
     needs: build_web
