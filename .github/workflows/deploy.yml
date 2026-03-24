@@ -1,0 +1,77 @@
+name: Deploy wasm
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_serverlauncher:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: "microsoft"
+          java-version: 21
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - name: Build
+        env:
+          OUT_DIR: ".."
+        run: ./gradlew :java:assemble --stacktrace
+      - name: Store built jar
+        uses: actions/upload-artifact@v7
+        with:
+          name: serverlauncher
+          path: ServerLauncher.jar
+          retention-days: 1
+  build_web:
+    needs: build_serverlauncher
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download jar artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: serverlauncher
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "latest"
+          package-manager-cache: false
+      - run: rustup target add wasm32-unknown-unknown
+      - run: cargo install wasm-bindgen-cli
+      - run: npm i
+      - name: Build web target
+        run: npm run build-release
+      - uses: actions/upload-pages-artifact@v4
+        id: deployment
+        with:
+          path: dist/
+  publish_web:
+    needs: build_web
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GH pages
+        id: deployment
+        uses: actions/deploy-pages@v4
