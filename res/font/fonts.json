@@ -66,13 +66,13 @@
   },
   "web": {
     "zh-CN": [
-      "https://github.com/notofonts/noto-cjk/raw/refs/heads/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf"
+      "https://raw.githubusercontent.com/notofonts/noto-cjk/refs/heads/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf"
     ],
     "zh-TW": [
-      "https://github.com/notofonts/noto-cjk/raw/refs/heads/main/Sans/OTF/TraditionalChinese/NotoSansCJKtc-Medium.otf"
+      "https://raw.githubusercontent.com/notofonts/noto-cjk/refs/heads/main/Sans/OTF/TraditionalChinese/NotoSansCJKtc-Regular.otf"
     ],
     "ja": [
-      "https://github.com/notofonts/noto-cjk/raw/refs/heads/main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf"
+      "https://raw.githubusercontent.com/notofonts/noto-cjk/refs/heads/main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf"
     ]
   }
 }
