@@ -30,7 +30,7 @@ use crate::{
 enum Mode {
     Client,
     Server,
-    MMC,
+    PrismLauncher,
 }
 
 pub async fn run() -> Result<(), InstallerError> {
@@ -416,7 +416,7 @@ impl App {
 
     #[cfg(not(target_arch = "wasm32"))]
     fn add_location_picker(&mut self, frame: &mut eframe::Frame, ui: &mut egui::Ui) {
-        ui.label(if self.mode == Mode::MMC && self.generate_zip {
+        ui.label(if self.mode == Mode::PrismLauncher && self.generate_zip {
             if *rust_i18n::locale() == *"fr" && self.detonation_easter_egg {
                 std::borrow::Cow::Borrowed("Emplacement de detonation")
             } else {
@@ -433,7 +433,7 @@ impl App {
             let res = ui.text_edit_singleline(match self.mode {
                 Mode::Client => &mut self.client_install_location,
                 Mode::Server => &mut self.server_install_location,
-                Mode::MMC => &mut self.mmc_output_location,
+                Mode::PrismLauncher => &mut self.mmc_output_location,
             });
             if !res.hovered() && !res.has_focus() {
                 ui.painter().rect_stroke(
@@ -448,7 +448,7 @@ impl App {
                     .set_directory(Path::new(match self.mode {
                         Mode::Client => &self.client_install_location,
                         Mode::Server => &self.server_install_location,
-                        Mode::MMC => &self.mmc_output_location,
+                        Mode::PrismLauncher => &self.mmc_output_location,
                     }))
                     .set_parent(&frame)
                     .pick_folder();
@@ -485,7 +485,7 @@ impl App {
         child.horizontal_centered(|ui| {
             ui.spacing_mut().icon_width -= 4.0;
             let mut clicked = false;
-            let width = line_rect.width() / 2.5;
+            let width = line_rect.width() / 2.0;
             let prev_mode = self.mode;
             ui.scope(|ui| {
                 ui.set_max_width(width);
@@ -496,7 +496,7 @@ impl App {
             ui.scope(|ui| {
                 ui.set_max_width(width);
                 clicked |= ui
-                    .radio_value(&mut self.mode, Mode::MMC, t!("gui.mode.mmc"))
+                    .radio_value(&mut self.mode, Mode::PrismLauncher, t!("gui.mode.prism"))
                     .clicked();
             });
             ui.scope(|ui| {
@@ -786,7 +786,7 @@ impl App {
                             Some(InstallationProgress::new((receiver, tokio::spawn(fut))));
                     }
                 }
-                Mode::MMC => {
+                Mode::PrismLauncher => {
                     let loader_type = self.selected_loader_type.clone();
                     let location = Path::new(&self.mmc_output_location).to_path_buf();
                     let copy_profile_path = self.copy_generated_location;
@@ -800,7 +800,7 @@ impl App {
                                 return;
                             }
                         };
-                    let fut = crate::actions::mmc_pack::install(
+                    let fut = crate::actions::prism_pack::install(
                         sender,
                         selected_version,
                         intermediary_version,
@@ -870,7 +870,7 @@ impl App {
         child.horizontal_centered(|ui| {
             let flap_checkbox =
                 Checkbox::new(&mut self.include_flap, t!("gui.checkbox.include_flap"));
-            let flap_box_response = if self.mode == Mode::MMC {
+            let flap_box_response = if self.mode == Mode::PrismLauncher {
                 ui.add_sized([ui.available_width() / 5.0, 20.0], flap_checkbox)
             } else {
                 ui.add(flap_checkbox)
@@ -892,7 +892,7 @@ impl App {
                         t!("gui.checkbox.download_minecraft_server"),
                     );
                 }
-                Mode::MMC => {
+                Mode::PrismLauncher => {
                     ui.add_sized(
                         [ui.available_width() * 2.0 / 3.0, 20.0],
                         Checkbox::new(
@@ -1068,7 +1068,7 @@ impl eframe::App for App {
                 match result.mode {
                     Mode::Client => self.client_install_location = result.path,
                     Mode::Server => self.server_install_location = result.path,
-                    Mode::MMC => self.mmc_output_location = result.path,
+                    Mode::PrismLauncher => self.mmc_output_location = result.path,
                 }
             }
         }

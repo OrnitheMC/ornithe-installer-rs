@@ -32,7 +32,7 @@
     "gui.button.install": "Nainstalovat",
     "gui.error.generic": "Chyba instalačního programu Ornithe",
     "gui.mode.client": "Klient (Oficiální Launcher)",
-    "gui.mode.mmc": "MultiMC/PrismLauncher",
+    "gui.mode.prism": "PrismLauncher",
     "gui.mode.server": "Server",
     "gui.ui.show_loader_betas": "Zobrazit Beta verze",
     "gui.checkbox.include_flap":"Zahrnout Flap",

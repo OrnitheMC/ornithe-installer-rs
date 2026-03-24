@@ -32,7 +32,7 @@
     "gui.button.install": "Installer",
     "gui.error.generic": "Erreur de l'installateur d'Ornithe",
     "gui.mode.client": "Client (Lanceur officiel)",
-    "gui.mode.mmc": "MultiMC/PrismLauncher",
+    "gui.mode.prism": "PrismLauncher",
     "gui.mode.server": "Serveur",
     "gui.ui.show_loader_betas": "Montrer les versions Bétas",
     "gui.checkbox.include_flap": "Inclure Flap",

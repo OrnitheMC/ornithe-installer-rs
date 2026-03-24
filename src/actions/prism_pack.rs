@@ -157,13 +157,12 @@ pub async fn install(
         Box::new(output_file.clone())
     };
 
-    let mut instance_cfg = INSTANCE_CONFIG.replace("${profile_name}", &profile_name);
-
-    if cfg!(all(any(unix), not(target_os = "macos"))) {
-        instance_cfg += "\nOverrideCommands=true\nWrapperCommand=env __GL_THREADED_OPTIMIZATIONS=0";
-    }
-
-    zip.write_file("instance.cfg", instance_cfg.as_bytes())?;
+    zip.write_file(
+        "instance.cfg",
+        INSTANCE_CONFIG
+            .replace("${profile_name}", &profile_name)
+            .as_bytes(),
+    )?;
 
     zip.write_file("ornithe.png", crate::ORNITHE_ICON_BYTES)?;
 

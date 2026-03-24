@@ -32,7 +32,7 @@
     "gui.button.install": "Встановити",
     "gui.error.generic": "Помилка встановлювача Ornithe",
     "gui.mode.client": "Клієнт (офіційний лаунчер)",
-    "gui.mode.mmc": "MultiMC/PrismLauncher",
+    "gui.mode.prism": "PrismLauncher",
     "gui.mode.server": "Сервер",
     "gui.ui.show_loader_betas": "Бета-версії",
     "gui.checkbox.include_flap":"Додати Flap",

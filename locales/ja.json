@@ -32,7 +32,7 @@
   "gui.button.install": "インストール",
   "gui.error.generic": "Ornitheインストーラーエラー",
   "gui.mode.client": "クライアント (公式ランチャー)",
-  "gui.mode.mmc": "MultiMC/PrismLauncher",
+  "gui.mode.prism": "PrismLauncher",
   "gui.mode.server": "サーバー",
   "gui.ui.show_loader_betas": "Betaを表示",
   "gui.checkbox.include_flap": "Flapを含める",

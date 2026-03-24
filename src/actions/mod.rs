@@ -12,7 +12,7 @@ use zip::{ZipWriter, write::SimpleFileOptions};
 
 use crate::errors::InstallerError;
 pub mod client;
-pub mod mmc_pack;
+pub mod prism_pack;
 pub mod server;
 
 #[cfg(target_arch = "wasm32")]

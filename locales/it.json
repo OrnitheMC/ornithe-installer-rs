@@ -32,7 +32,7 @@
     "gui.button.install": "Installa",
     "gui.error.generic": "Ornithe Installer Error",
     "gui.mode.client": "Client (Launcher Ufficiale)",
-    "gui.mode.mmc": "MultiMC/PrismLauncher",
+    "gui.mode.prism": "PrismLauncher",
     "gui.mode.server": "Server",
     "gui.ui.show_loader_betas": "Mostra Versioni Beta",
     "gui.checkbox.include_flap": "Includi Flap",

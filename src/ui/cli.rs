@@ -408,7 +408,7 @@ async fn do_install(
             .unwrap()
             .clone();
         let generate_zip = matches.get_one::<bool>("generate-zip").unwrap().clone();
-        crate::actions::mmc_pack::install(
+        crate::actions::prism_pack::install(
             send,
             minecraft_version,
             intermediary,

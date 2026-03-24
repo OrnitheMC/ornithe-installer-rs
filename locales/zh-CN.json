@@ -32,7 +32,7 @@
     "gui.button.install": "安装",
     "gui.error.generic": "Ornithe 安装器错误",
     "gui.mode.client": "客户端(官方启动器)",
-    "gui.mode.mmc": "MultiMC/PrismLauncher",
+    "gui.mode.prism": "PrismLauncher",
     "gui.mode.server": "服务端",
     "gui.ui.show_loader_betas": "显示 Beta 版本",
     "gui.checkbox.include_flap":"包括 Flap",
