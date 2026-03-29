@@ -149,10 +149,8 @@ pub async fn install(
         });
     }
 
-    if create_profile {
-        if cfg!(not(target_arch = "wasm32")) {
-            update_profiles(location, profile_name, version, loader_type, calamus_gen)?;
-        }
+    if create_profile && cfg!(not(target_arch = "wasm32")) {
+        update_profiles(location, profile_name, version, loader_type, calamus_gen)?;
     }
 
     let _ = sender.send((1.0, t!("client.info.done").into()));

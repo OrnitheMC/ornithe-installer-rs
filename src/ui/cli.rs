@@ -101,6 +101,8 @@ pub async fn run() {
 
     #[cfg(target_arch = "wasm32")]
     {
+        let window = web_sys::window().expect("Window not available");
+        let document = window.document().expect("Document not available");
         let location = web_sys::window().expect("Window not available").location();
         let query = location.search().unwrap_or(String::new());
         let query_presplit = format!("--{}", query[1..].replace("&", " --").replace("=", " "));
@@ -110,6 +112,11 @@ pub async fn run() {
             .bin_name("ornithe-installer-rs")
             .color(clap::ColorChoice::Never)
             .try_get_matches_from(query_cleaned);
+        let loading_text = document.get_element_by_id("loading_text").unwrap();
+        let _ = loading_text.insert_adjacent_html(
+            "afterend",
+            "<i style=\"font-size: 16px;\" id=\"status_notes\"></i>",
+        );
 
         match res {
             Ok(res) => match parse(res).await {
@@ -119,10 +126,7 @@ pub async fn run() {
                             Ornithe has been successfully installed.
                             Most mods require that you also download the Ornithe Standard Libraries mod and place it in your mods folder.
                             You can find it at {}.", crate::OSL_MODRINTH_URL);
-                        let window = web_sys::window().expect("Window not available");
-                        let document = window.document().expect("Document not available");
-                        if let Some(element) = document.get_element_by_id("loading_text") {
-                            element.set_inner_html(&format!(
+                        loading_text.set_inner_html(&format!(
                             "<h3>Installation complete!</h3>
                             <p>
                             Ornithe has been successfully installed.
@@ -132,13 +136,13 @@ pub async fn run() {
                             You can find it at <a href=\"{}\">{}</a>
                             </p>",
                             crate::OSL_MODRINTH_URL,
-                            crate::OSL_MODRINTH_URL
-                        ));
-                        }
+                            crate::OSL_MODRINTH_URL));
                     }
                 }
                 Err(e) => {
                     log::warn!("Error while running Ornithe Installer CLI: {}", &e.0);
+                    loading_text
+                        .set_inner_html(&format!("<h3>Encountered error:</h3><p>{}</p>", &e.0));
                 }
             },
             Err(error) => {
@@ -188,6 +192,9 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
     }
     if let Some(matches) = matches.subcommand_matches("loader-versions") {
         let generation = matches.get_one::<u32>("gen").map(|u| *u);
+        if let Some(g) = generation {
+            print_note_intermediary_generation(g);
+        }
         let versions = crate::net::meta::fetch_loader_versions(&generation).await?;
         let loader_type = get_loader_type(matches)?;
         let betas = matches.get_flag("show-betas");
@@ -307,7 +314,9 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         while !fut.is_finished() || !recv.is_empty() {
             match recv.try_recv() {
                 Ok((prog, msg)) => {
-                    pb.println(msg);
+                    if !msg.is_empty() {
+                        pb.println(msg);
+                    }
                     pb.set_position((prog * 100.0) as u64);
                 }
                 Err(_) => {}
@@ -316,6 +325,35 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         pb.finish_and_clear();
         return fut.await.unwrap();
     }
+}
+
+fn print_note_intermediary_generation(generation: u32) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        log::info!("Using Intermediary Generation: {generation}");
+        let window = web_sys::window().expect("Window not available");
+        let document = window.document().expect("Document not available");
+        let status_notes = document.get_element_by_id("status_notes").unwrap();
+        let _ = status_notes.insert_adjacent_html(
+            "beforeend",
+            &format!("Using Intermediary Generation: {generation}<br>"),
+        );
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    println!("Using Intermediary Generation: {generation}");
+}
+
+fn print_note_excluding_flap(_sender: &UnboundedSender<(f32, String)>) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        log::info!("Not installing Flap.");
+        let window = web_sys::window().expect("Window not available");
+        let document = window.document().expect("Document not available");
+        let status_notes = document.get_element_by_id("status_notes").unwrap();
+        let _ = status_notes.insert_adjacent_html("beforeend", "Not installing Flap.<br>");
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = _sender.send((0.0, "Not installing Flap.".to_owned()));
 }
 
 async fn do_install(
@@ -332,6 +370,14 @@ async fn do_install(
         let loader_version = get_loader_version(matches, loader_versions)?;
         let location = matches.get_one::<PathBuf>("dir").unwrap().clone();
         let create_profile = matches.get_flag("generate-profile");
+        #[cfg(not(target_arch = "wasm32"))]
+        if !create_profile {
+            let _ = send.send((0.0, "Not generating profile entry.".to_owned()));
+        }
+        let exclude_flap = matches.get_flag("exclude-flap");
+        if exclude_flap {
+            print_note_excluding_flap(&send);
+        }
         crate::actions::client::install(
             send,
             minecraft_version,
@@ -341,7 +387,7 @@ async fn do_install(
             info.calamus_generation,
             location,
             create_profile,
-            !matches.get_flag("exclude-flap"),
+            !exclude_flap,
         )
         .await?;
         return Ok(InstallationResult::Installed);
@@ -357,7 +403,10 @@ async fn do_install(
         let loader_versions = all_loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let location = matches.get_one::<PathBuf>("dir").unwrap().clone();
-        let include_flap = !matches.get_flag("exclude-flap");
+        let exclude_flap = matches.get_flag("exclude-flap");
+        if exclude_flap {
+            print_note_excluding_flap(&send);
+        }
         if let Some(matches) = matches.subcommand_matches("run") {
             let java = matches.get_one::<PathBuf>("java");
             let run_args = matches.get_one::<String>("args");
@@ -369,7 +418,7 @@ async fn do_install(
                 loader_version,
                 info.calamus_generation,
                 location,
-                include_flap,
+                !exclude_flap,
                 java,
                 run_args.map(|s| s.split(" ")),
             )
@@ -388,7 +437,7 @@ async fn do_install(
             info.calamus_generation,
             location,
             matches.get_flag("download-minecraft"),
-            include_flap,
+            !exclude_flap,
         )
         .await?;
         return Ok(InstallationResult::Installed);
@@ -408,6 +457,10 @@ async fn do_install(
             .unwrap()
             .clone();
         let generate_zip = matches.get_one::<bool>("generate-zip").unwrap().clone();
+        let exclude_flap = matches.get_flag("exclude-flap");
+        if exclude_flap {
+            print_note_excluding_flap(&send);
+        }
         crate::actions::prism_pack::install(
             send,
             minecraft_version,
@@ -418,7 +471,7 @@ async fn do_install(
             copy_profile_path,
             generate_zip,
             info.calamus_generation,
-            !matches.get_flag("exclude-flap"),
+            !exclude_flap,
         )
         .await?;
         return Ok(InstallationResult::Installed);
@@ -431,6 +484,9 @@ async fn get_minecraft_information(
     matches: &ArgMatches,
 ) -> Result<MinecraftInformation, InstallerError> {
     let generation = matches.get_one::<u32>("gen").map(|u| *u);
+    if let Some(g) = generation {
+        print_note_intermediary_generation(g);
+    }
     let minecraft_versions = crate::net::manifest::fetch_versions(&generation).await?;
     let intermediary_versions = crate::net::meta::fetch_intermediary_versions(&generation).await?;
 

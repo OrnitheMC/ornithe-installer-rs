@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     hash::Hash,
-    path::Path,
+    path::{Path, PathBuf},
     sync::mpsc::{Receiver, Sender},
 };
 
@@ -544,13 +544,14 @@ impl App {
                 );
             }
 
-            if ui
+            let snapshots_clicked = ui
                 .checkbox(&mut self.show_snapshots, t!("gui.ui.checkbox.snapshots"))
-                .clicked()
-                || ui
-                    .checkbox(&mut self.show_historical, t!("gui.ui.checkbox.historical"))
-                    .clicked()
-            {
+                .clicked();
+            let historical_clicked = ui
+                .checkbox(&mut self.show_historical, t!("gui.ui.checkbox.historical"))
+                .clicked();
+
+            if snapshots_clicked || historical_clicked {
                 self.filter_minecraft_versions();
             }
         });
@@ -697,21 +698,26 @@ impl App {
             let (sender, receiver) = unbounded_channel();
             #[cfg(target_arch = "wasm32")]
             let sender2 = sender.clone();
+            let loader_type = self.selected_loader_type.clone();
+            let intermediary_version =
+                match self.get_intermediary_version(&selected_version, GameSide::Server) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        self.modals
+                            .push(ModalPopup::ok(t!("gui.error.installation_failed"), e.0));
+                        return;
+                    }
+                };
+            if !include_flap {
+                let _ = sender.send((0.0, t!("gui.message.excluding_flap").into()));
+            }
             match self.mode {
                 Mode::Client => {
-                    let loader_type = self.selected_loader_type.clone();
-                    let location = Path::new(&self.client_install_location).to_path_buf();
+                    let location = PathBuf::from(&self.client_install_location);
                     let create_profile = self.create_profile;
-                    let intermediary_version = match self
-                        .get_intermediary_version(&selected_version, GameSide::Client)
-                    {
-                        Ok(v) => v,
-                        Err(e) => {
-                            self.modals
-                                .push(ModalPopup::ok(t!("gui.error.installation_failed"), &e.0));
-                            return;
-                        }
-                    };
+                    if !create_profile {
+                        let _ = sender.send((0.0, t!("gui.message.not_creating_profile").into()));
+                    }
                     let fut = crate::actions::client::install(
                         sender,
                         selected_version,
@@ -744,18 +750,8 @@ impl App {
                     }
                 }
                 Mode::Server => {
-                    let loader_type = self.selected_loader_type.clone();
                     let location = Path::new(&self.server_install_location).to_path_buf();
                     let download_server = self.download_minecraft_server;
-                    let intermediary_version =
-                        match self.get_intermediary_version(&selected_version, GameSide::Server) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                self.modals
-                                    .push(ModalPopup::ok(t!("gui.error.installation_failed"), e.0));
-                                return;
-                            }
-                        };
                     let fut = crate::actions::server::install(
                         sender,
                         selected_version,
@@ -787,19 +783,9 @@ impl App {
                     }
                 }
                 Mode::PrismLauncher => {
-                    let loader_type = self.selected_loader_type.clone();
                     let location = Path::new(&self.mmc_output_location).to_path_buf();
                     let copy_profile_path = self.copy_generated_location;
                     let generate_zip = self.generate_zip;
-                    let intermediary_version =
-                        match self.get_intermediary_version(&selected_version, GameSide::Client) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                self.modals
-                                    .push(ModalPopup::ok(t!("gui.error.installation_failed"), e.0));
-                                return;
-                            }
-                        };
                     let fut = crate::actions::prism_pack::install(
                         sender,
                         selected_version,
@@ -881,6 +867,7 @@ impl App {
             }
             match self.mode {
                 Mode::Client => {
+                    #[cfg(not(target_arch = "wasm32"))]
                     ui.checkbox(
                         &mut self.create_profile,
                         t!("gui.checkbox.generate_profile"),
@@ -900,6 +887,7 @@ impl App {
                             t!("gui.checkbox.copy_profile_path"),
                         ),
                     );
+                    #[cfg(not(target_arch = "wasm32"))]
                     ui.checkbox(
                         &mut self.generate_zip,
                         t!("gui.checkbox.generate_instance_zip"),
@@ -1106,7 +1094,11 @@ impl eframe::App for App {
 
                 ui.add_space(15.0);
                 ui.vertical_centered(|ui| {
-                    if Button::new(RichText::new(t!("gui.button.install")).heading())
+                    #[cfg(target_arch = "wasm32")]
+                    let install_text = t!("gui.button.install_web");
+                    #[cfg(not(target_arch = "wasm32"))]
+                    let install_text = t!("gui.button.install");
+                    if Button::new(RichText::new(install_text).heading())
                         .min_size(Vec2::new(100.0, 0.0))
                         .ui(ui)
                         .clicked()

@@ -53,7 +53,6 @@
       /* Allow canvas to fill entire web page: */
       html,
       body {
-        overflow: hidden;
         margin: 0 !important;
         padding: 0 !important;
         height: 100%;
@@ -123,10 +122,15 @@
 
     <!-- the loading spinner will be removed in gui.rs -->
     <!-- make sure the ids of these elements are kept, they are referenced in rust (both gui.rs and cli.rs)! -->
-    <div class="centered" id="loading_text">
-      <noscript>You need javascript to use this website</noscript>
-      <p style="font-size: 16px" id="loading_status">Loading…</p>
-      <div class="lds-dual-ring"></div>
+    <div class="centered">
+      <div id="loading_text">
+        <noscript
+          >You need javascript to use this page. Alternatively, you may use the
+          downloadable version of this installer.</noscript
+        >
+        <p style="font-size: 16px" id="loading_status">Loading…</p>
+        <div class="lds-dual-ring"></div>
+      </div>
     </div>
   </body>
 </html>

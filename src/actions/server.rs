@@ -100,7 +100,6 @@ async fn install_path(
         )
     };
     let _ = sender.send((0.1, message.into()));
-    #[cfg(not(target_arch = "wasm32"))]
     let location = location.canonicalize()?;
 
     #[cfg(not(target_arch = "wasm32"))]
