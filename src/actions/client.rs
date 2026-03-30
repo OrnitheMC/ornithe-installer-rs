@@ -69,6 +69,8 @@ pub async fn install(
     .await?;
 
     let _ = sender.send((0.6, t!("client.info.setting_up_destination").into()));
+    #[cfg(target_arch = "wasm32")]
+    let location = PathBuf::new();
 
     let versions_dir = location.join("versions");
     let profile_dir = versions_dir.join(&profile_name);

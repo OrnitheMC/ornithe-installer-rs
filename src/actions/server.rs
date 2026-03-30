@@ -100,7 +100,10 @@ async fn install_path(
         )
     };
     let _ = sender.send((0.1, message.into()));
+    #[cfg(not(target_arch = "wasm32"))]
     let location = location.canonicalize()?;
+    #[cfg(target_arch = "wasm32")]
+    let location = PathBuf::new();
 
     #[cfg(not(target_arch = "wasm32"))]
     let clear_paths = [location.join(".fabric"), location.join(".quilt")];
