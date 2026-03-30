@@ -181,18 +181,21 @@ pub async fn install(
     let pack_components = transformed_pack_json["components"].as_array_mut().unwrap();
     let _ = sender.send((0.75, t!("mmc.info.adding_library_components").into()));
     for library in extra_libs {
-        let colons = library
+        let mut colons = library
             .name
             .char_indices()
             .filter(|c| c.1 == ':')
             .map(|c| c.0);
-        let index = colons.clone().last().unwrap();
+        let index = colons.clone().next_back().unwrap();
         let uid = library.name.get(0..index).unwrap().replace(":", ".");
         let lib_name = library
             .name
-            .get((colons.clone().next().unwrap() + 1)..colons.clone().last().unwrap())
+            .get((colons.clone().next().unwrap() + 1)..colons.clone().next_back().unwrap())
             .unwrap();
-        let version = library.name.get((colons.last().unwrap() + 1)..).unwrap();
+        let version = library
+            .name
+            .get((colons.next_back().unwrap() + 1)..)
+            .unwrap();
         zip.write_file(&("patches/".to_owned() + &uid + ".json"), 
             format!(r#"{{"formatVersion": 1, "libraries": [{{"name": "{}","url": "{}"}}], "name": "{}", "type": "release", "uid": "{}", "version": "{}"}}"#,
              library.name, library.url, lib_name, uid, version).as_bytes())?;
@@ -296,33 +299,33 @@ pub async fn install(
 
 async fn transform_intermediary_patch(
     version: &MinecraftVersion,
-    intermediary_version: &String,
-    intermediary_maven: &String,
+    intermediary_version: &str,
+    intermediary_maven: &str,
 ) -> Result<String, InstallerError> {
     Ok(INTERMEDIARY_PATCH
         .replace("${mc_version}", &version.id)
-        .replace("${intermediary_ver}", &intermediary_version)
-        .replace("${intermediary_maven}", &intermediary_maven))
+        .replace("${intermediary_ver}", intermediary_version)
+        .replace("${intermediary_maven}", intermediary_maven))
 }
 
 async fn transform_pack_json(
     version: &MinecraftVersion,
     loader_type: &LoaderType,
     loader_version: &LoaderVersion,
-    lwjgl_version: &String,
-    intermediary_version: &String,
+    lwjgl_version: &str,
+    intermediary_version: &str,
 ) -> Result<String, InstallerError> {
     let lwjgl_major = lwjgl_version.chars().next().unwrap();
     Ok(MMC_PACK
         .replace("${mc_version}", &version.id)
-        .replace("${intermediary_ver}", &intermediary_version)
+        .replace("${intermediary_ver}", intermediary_version)
         .replace("${loader_version}", &loader_version.version)
         .replace(
             "${loader_name}",
             &(loader_type.get_localized_name().to_owned() + " Loader"),
         )
         .replace("${loader_uid}", loader_type.get_maven_uid())
-        .replace("${lwjgl_version}", &lwjgl_version)
+        .replace("${lwjgl_version}", lwjgl_version)
         .replace("${lwjgl_major_ver}", &lwjgl_major.to_string())
         .replace(
             "${lwjgl_uid}",
@@ -341,7 +344,7 @@ async fn get_mmc_launch_json(
     ornithe_launch_json: &Value,
 ) -> Result<String, InstallerError> {
     let client_name = format!("com.mojang:minecraft:{}:client", version.id);
-    let (_, vanilla_launch_json) = manifest::fetch_launch_json(version, &generation).await?;
+    let (_, vanilla_launch_json) = manifest::fetch_launch_json(version, generation).await?;
     let vanilla_json = serde_json::from_str::<Value>(&vanilla_launch_json)?;
 
     let client = vanilla_json["downloads"]["client"].as_object().unwrap();
@@ -375,18 +378,18 @@ async fn get_mmc_launch_json(
         .unwrap_or("")
         .to_owned();
 
-    if let Some(game_arguments) = vanilla_json["arguments"]["game"].as_array() {
-        if !game_arguments.is_empty() {
-            let mut combined = String::new();
-            for arg in game_arguments {
-                if arg.is_string() {
-                    combined += &(arg.as_str().unwrap().to_owned() + " ");
-                }
+    if let Some(game_arguments) = vanilla_json["arguments"]["game"].as_array()
+        && !game_arguments.is_empty()
+    {
+        let mut combined = String::new();
+        for arg in game_arguments {
+            if arg.is_string() {
+                combined += &(arg.as_str().unwrap().to_owned() + " ");
             }
-            minecraft_arguments = combined.trim().to_owned();
-
-            traits.push("FirstThreadOnMacOs");
         }
+        minecraft_arguments = combined.trim().to_owned();
+
+        traits.push("FirstThreadOnMacOs");
     }
 
     let lwjgl_major = lwjgl_version.chars().next().unwrap();

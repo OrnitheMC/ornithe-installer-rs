@@ -80,7 +80,7 @@ async fn install_path(
 ) -> Result<(), InstallerError> {
     #[cfg(not(target_arch = "wasm32"))]
     if !location.exists() {
-        std::fs::create_dir_all(&location)?;
+        std::fs::create_dir_all(location)?;
     }
 
     let message = if cfg!(target_arch = "wasm32") {
@@ -136,7 +136,7 @@ async fn install_path(
 
     match loader_type {
         LoaderType::Fabric => {
-            main_class = &launch_json["mainClass"]
+            main_class = launch_json["mainClass"]
                 .as_str()
                 .ok_or(InstallerError::from(t!(
                     "server.error.could_not_find_main_class_entry"
@@ -459,15 +459,15 @@ async fn create_launch_jar(
         }
     }
 
-    if let Some(flap_path) = flap_jar_path {
-        if let Some(path) = flap_path.strip_prefix(install_location)?.to_str() {
-            zip.start_file("ornithe-args.json", SimpleFileOptions::default())?;
-            zip.write_all(&serde_json::to_vec(&json!({
-                "flap_jar": path.replace("\\", "/"),
-                "main_class": launch_main_class,
-                "jvm_args": jvm_args
-            }))?)?;
-        }
+    if let Some(flap_path) = flap_jar_path
+        && let Some(path) = flap_path.strip_prefix(install_location)?.to_str()
+    {
+        zip.start_file("ornithe-args.json", SimpleFileOptions::default())?;
+        zip.write_all(&serde_json::to_vec(&json!({
+            "flap_jar": path.replace("\\", "/"),
+            "main_class": launch_main_class,
+            "jvm_args": jvm_args
+        }))?)?;
     }
 
     writeln!(manifest, "{}\r", wrap_manifest_line(class_path.trim_end()))?;
@@ -545,7 +545,7 @@ fn read_jar_manifest_attribute(
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn download_library(
-    libraries_dir: &PathBuf,
+    libraries_dir: &Path,
     name: String,
     url: String,
 ) -> Result<PathBuf, InstallerError> {
@@ -559,7 +559,7 @@ async fn download_library(
 
 fn split_artifact(artifact: &str) -> String {
     let parts = artifact.splitn(3, ":").collect::<Vec<&str>>();
-    let group = parts.get(0).unwrap().replace(".", "/");
+    let group = parts.first().unwrap().replace(".", "/");
     let name = parts.get(1).unwrap();
     let version = parts.get(2).unwrap();
 
@@ -584,7 +584,10 @@ where
 {
     let launch_jar = location.join(loader_type.get_name().to_owned() + "-server-launch.jar");
     let mut needs_install = false;
-    let _ = sender.send((0.0, format!("Checking for present server installation...")));
+    let _ = sender.send((
+        0.0,
+        "Checking for present server installation...".to_string(),
+    ));
     if !launch_jar.exists() {
         needs_install = true;
     }
@@ -613,10 +616,10 @@ where
     let _ = sender.send((0.95, t!("server.info.launching").into()));
 
     let mut java_binary = "java".to_owned();
-    if let Some(arg) = java {
-        if let Some(path) = arg.to_str() {
-            java_binary = path.to_owned();
-        }
+    if let Some(arg) = java
+        && let Some(path) = arg.to_str()
+    {
+        java_binary = path.to_owned();
     }
     let jar = launch_jar.canonicalize()?;
 

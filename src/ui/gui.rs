@@ -141,7 +141,7 @@ fn display_dialog_ext<F, T: Into<String> + Display, M: Into<String> + Display>(
     buttons: MessageButtons,
     after: F,
 ) where
-    F: FnOnce(MessageDialogResult) -> (),
+    F: FnOnce(MessageDialogResult),
     F: Send,
     F: 'static,
 {
@@ -198,14 +198,14 @@ struct ModalPopup {
     title: String,
     message: String,
     buttons: MessageButtons,
-    after: Box<dyn FnOnce(MessageDialogResult) -> () + Send + 'static>,
+    after: Box<dyn FnOnce(MessageDialogResult) + Send + 'static>,
 }
 
 impl ModalPopup {
     pub fn yesno(
         title: String,
         message: String,
-        after: Box<dyn FnOnce(MessageDialogResult) -> () + Send + 'static>,
+        after: Box<dyn FnOnce(MessageDialogResult) + Send + 'static>,
     ) -> Self {
         Self {
             title,
@@ -218,7 +218,7 @@ impl ModalPopup {
     pub fn ok_ext(
         title: String,
         message: String,
-        after: Box<dyn FnOnce(MessageDialogResult) -> () + Send + 'static>,
+        after: Box<dyn FnOnce(MessageDialogResult) + Send + 'static>,
     ) -> Self {
         Self {
             title,
@@ -233,21 +233,22 @@ impl ModalPopup {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+type Task = (
+    UnboundedReceiver<(f32, String)>,
+    tokio::task::JoinHandle<Result<(), InstallerError>>,
+);
+#[cfg(target_arch = "wasm32")]
+type Task = UnboundedReceiver<(f32, String)>;
 pub struct InstallationProgress {
     last_progress: f32,
     status: Vec<String>,
-    #[cfg(not(target_arch = "wasm32"))]
-    task: Option<(
-        UnboundedReceiver<(f32, String)>,
-        tokio::task::JoinHandle<Result<(), InstallerError>>,
-    )>,
-    #[cfg(target_arch = "wasm32")]
-    task: Option<UnboundedReceiver<(f32, String)>>,
+    task: Option<Task>,
 }
 
 #[cfg(target_arch = "wasm32")]
 impl InstallationProgress {
-    pub fn new(task: UnboundedReceiver<(f32, String)>) -> Self {
+    pub fn new(task: Task) -> Self {
         Self {
             last_progress: 0.0,
             status: Vec::new(),
@@ -274,12 +275,7 @@ impl InstallationProgress {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl InstallationProgress {
-    pub fn new(
-        task: (
-            UnboundedReceiver<(f32, String)>,
-            tokio::task::JoinHandle<Result<(), InstallerError>>,
-        ),
-    ) -> Self {
+    pub fn new(task: Task) -> Self {
         Self {
             last_progress: 0.0,
             status: Vec::new(),
@@ -310,18 +306,15 @@ impl InstallationProgress {
 }
 impl InstallationProgress {
     pub fn poll(&mut self) {
-        if let Some(ref mut rec) = self.rec() {
-            match rec.try_recv() {
-                Ok((progress, message)) => {
-                    if progress <= 1.0 {
-                        info!("{}% - {}", (progress * 100.0) as i32, &message);
-                    }
-                    self.last_progress = progress;
-                    if !message.is_empty() {
-                        self.status.push(message);
-                    }
-                }
-                Err(_) => {}
+        if let Some(rec) = self.rec()
+            && let Ok((progress, message)) = rec.try_recv()
+        {
+            if progress <= 1.0 {
+                info!("{}% - {}", (progress * 100.0) as i32, &message);
+            }
+            self.last_progress = progress;
+            if !message.is_empty() {
+                self.status.push(message);
             }
         }
     }
@@ -355,7 +348,7 @@ impl App {
                 intermediary_versions.insert(v.0, v.1);
             }
         }
-        if available_minecraft_versions.len() == 0 {
+        if available_minecraft_versions.is_empty() {
             return Err(InstallerError::from(t!(
                 "gui.error.no_available_minecraft_versions"
             )));
@@ -389,7 +382,7 @@ impl App {
             selected_loader_type: LoaderType::Fabric,
             selected_loader_version: available_loader_versions
                 .get(&LoaderType::Fabric)
-                .map(|v| v.get(0).unwrap().version.clone())
+                .map(|v| v.first().unwrap().version.clone())
                 .unwrap_or(String::new()),
             available_loader_versions,
             show_betas: false,
@@ -454,18 +447,18 @@ impl App {
                     .pick_folder();
                 self.file_picker_open = true;
                 let sender = self.file_picker_channel.0.clone();
-                let mode = self.mode.clone();
+                let mode = self.mode;
                 let ctx = ui.ctx().clone();
                 tokio::spawn(async move {
                     let opt = picked.await;
                     let mut send = None;
-                    if let Some(path) = opt {
-                        if let Some(path) = path.path().to_str() {
-                            send = Some(FilePickResult {
-                                mode,
-                                path: path.to_owned(),
-                            });
-                        }
+                    if let Some(path) = opt
+                        && let Some(path) = path.path().to_str()
+                    {
+                        send = Some(FilePickResult {
+                            mode,
+                            path: path.to_owned(),
+                        });
                     }
                     let _ = sender.send(send);
                     ctx.request_repaint();
@@ -637,7 +630,7 @@ impl App {
             ui.label(t!("gui.ui.loader_version"));
             ComboBox::from_id_salt("loader_version")
                 .height(130.0)
-                .selected_text(format!("{}", &self.selected_loader_version))
+                .selected_text(self.selected_loader_version.to_string())
                 .show_ui(ui, |ui| {
                     for ele in self
                         .available_loader_versions
@@ -655,13 +648,13 @@ impl App {
                 });
             let checkbox_response =
                 ui.checkbox(&mut self.show_betas, t!("gui.ui.show_loader_betas"));
-            if !self
+            if self
                 .available_loader_versions
                 .get(&self.selected_loader_type)
                 .unwrap()
                 .iter()
                 .find(|v| v.version == self.selected_loader_version)
-                .is_some()
+                .is_none()
                 || checkbox_response.clicked()
                 || loader_type_response.inner.is_some_and(|t| t)
             {
@@ -827,22 +820,22 @@ impl App {
     }
 
     fn monitor_installation(&mut self) {
-        if let Some(progress) = &self.installation_task {
-            if progress.is_finished() {
-                let prog = self.installation_task.as_mut().unwrap();
-                while !prog.rec().map(|rec| rec.is_empty()).unwrap_or(false) {
-                    prog.poll();
-                }
-                #[cfg(target_arch = "wasm32")]
-                let _ = prog.task.take();
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    let (_, handle) = prog.task.take().unwrap();
-                    let dialog_sender = self.modal_channel.0.clone();
-                    tokio::spawn(async move {
-                        App::post_installation(handle.await.unwrap(), dialog_sender);
-                    });
-                }
+        if let Some(progress) = &self.installation_task
+            && progress.is_finished()
+        {
+            let prog = self.installation_task.as_mut().unwrap();
+            while !prog.rec().map(|rec| rec.is_empty()).unwrap_or(false) {
+                prog.poll();
+            }
+            #[cfg(target_arch = "wasm32")]
+            let _ = prog.task.take();
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let (_, handle) = prog.task.take().unwrap();
+                let dialog_sender = self.modal_channel.0.clone();
+                tokio::spawn(async move {
+                    App::post_installation(handle.await.unwrap(), dialog_sender);
+                });
             }
         }
     }
@@ -913,7 +906,7 @@ impl App {
                     .get(&(selected_version.id.to_owned() + "-server"))
             }),
         }
-        .map(|v| v.clone())
+        .cloned()
         .ok_or(InstallerError::from(t!(
             "error.no_matching_intermediary_version",
             version = selected_version.id
@@ -1027,16 +1020,16 @@ impl App {
                     t!("gui.dialog.installation_successful").to_string(),
                     t!("gui.dialog.installation_successful.message").to_string(),
                     Box::new(move |res| {
-                        if res == MessageDialogResult::Yes || res == MessageDialogResult::Ok {
-                            if webbrowser::open(crate::OSL_MODRINTH_URL).is_err() {
-                                let _ = s.send(ModalPopup::ok(
-                                    t!("gui.error.failed_to_open_modrinth"),
-                                    t!(
-                                        "gui.error.failed_to_open_modrinth.message",
-                                        osl_url = crate::OSL_MODRINTH_URL
-                                    ),
-                                ));
-                            }
+                        if (res == MessageDialogResult::Yes || res == MessageDialogResult::Ok)
+                            && webbrowser::open(crate::OSL_MODRINTH_URL).is_err()
+                        {
+                            let _ = s.send(ModalPopup::ok(
+                                t!("gui.error.failed_to_open_modrinth"),
+                                t!(
+                                    "gui.error.failed_to_open_modrinth.message",
+                                    osl_url = crate::OSL_MODRINTH_URL
+                                ),
+                            ));
                         }
                     }),
                 ));
@@ -1108,12 +1101,9 @@ impl eframe::App for App {
                 });
             });
         });
-        match self.modal_channel.1.try_recv() {
-            Ok(modal) => {
-                info!("Displaying dialog: {}: {}", modal.title, modal.message);
-                self.modals.push(modal)
-            }
-            Err(_) => {}
+        if let Ok(modal) = self.modal_channel.1.try_recv() {
+            info!("Displaying dialog: {}: {}", modal.title, modal.message);
+            self.modals.push(modal)
         }
         for i in 0..self.modals.len() {
             let modal = &self.modals[i];
@@ -1127,145 +1117,138 @@ impl eframe::App for App {
                     ui.label(&modal.message);
                     ui.add_space(15.0);
                     ui.set_max_width(ui.max_rect().width() - 40.0);
-                    return ui
-                        .horizontal(|ui| match &modal.buttons {
-                            MessageButtons::Ok => {
-                                if ui
-                                    .add_sized(
-                                        [ui.available_width(), 20.0],
-                                        Button::new(t!("gui.button.ok")),
-                                    )
-                                    .clicked()
-                                {
-                                    return Some(MessageDialogResult::Ok);
-                                }
-                                return None;
+                    ui.horizontal(|ui| match &modal.buttons {
+                        MessageButtons::Ok => {
+                            if ui
+                                .add_sized(
+                                    [ui.available_width(), 20.0],
+                                    Button::new(t!("gui.button.ok")),
+                                )
+                                .clicked()
+                            {
+                                return Some(MessageDialogResult::Ok);
                             }
-                            MessageButtons::OkCancel => {
-                                if ui
-                                    .add_sized(
-                                        [ui.available_width() / 2.0, 20.0],
-                                        Button::new(t!("gui.button.ok")),
-                                    )
-                                    .clicked()
-                                {
-                                    return Some(MessageDialogResult::Ok);
-                                }
-                                if ui
-                                    .add_sized(
-                                        [ui.available_width(), 20.0],
-                                        Button::new(t!("gui.button.cancel")),
-                                    )
-                                    .clicked()
-                                {
-                                    return Some(MessageDialogResult::Cancel);
-                                }
-                                return None;
+                            None
+                        }
+                        MessageButtons::OkCancel => {
+                            if ui
+                                .add_sized(
+                                    [ui.available_width() / 2.0, 20.0],
+                                    Button::new(t!("gui.button.ok")),
+                                )
+                                .clicked()
+                            {
+                                return Some(MessageDialogResult::Ok);
                             }
-                            MessageButtons::YesNo => {
-                                if ui
-                                    .add_sized(
-                                        [ui.available_width() / 2.0, 20.0],
-                                        Button::new(t!("gui.button.yes")),
-                                    )
-                                    .clicked()
-                                {
-                                    return Some(MessageDialogResult::Yes);
-                                }
-                                if ui
-                                    .add_sized(
-                                        [ui.available_width(), 20.0],
-                                        Button::new(t!("gui.button.no")),
-                                    )
-                                    .clicked()
-                                {
-                                    return Some(MessageDialogResult::No);
-                                }
-                                return None;
+                            if ui
+                                .add_sized(
+                                    [ui.available_width(), 20.0],
+                                    Button::new(t!("gui.button.cancel")),
+                                )
+                                .clicked()
+                            {
+                                return Some(MessageDialogResult::Cancel);
                             }
-                            MessageButtons::YesNoCancel => {
-                                if ui
-                                    .add_sized(
-                                        [ui.available_width() / 3.0, 20.0],
-                                        Button::new(t!("gui.button.yes")),
-                                    )
-                                    .clicked()
-                                {
-                                    return Some(MessageDialogResult::Yes);
-                                }
-                                if ui
-                                    .add_sized(
-                                        [ui.available_width() / 2.0, 20.0],
-                                        Button::new(t!("gui.button.no")),
-                                    )
-                                    .clicked()
-                                {
-                                    return Some(MessageDialogResult::No);
-                                }
-                                if ui
-                                    .add_sized(
-                                        [ui.available_width(), 20.0],
-                                        Button::new(t!("gui.button.cancel")),
-                                    )
-                                    .clicked()
-                                {
-                                    return Some(MessageDialogResult::Cancel);
-                                }
-                                return None;
+                            None
+                        }
+                        MessageButtons::YesNo => {
+                            if ui
+                                .add_sized(
+                                    [ui.available_width() / 2.0, 20.0],
+                                    Button::new(t!("gui.button.yes")),
+                                )
+                                .clicked()
+                            {
+                                return Some(MessageDialogResult::Yes);
                             }
-                            MessageButtons::OkCustom(text) => {
-                                if ui
-                                    .add_sized([ui.available_width(), 20.0], Button::new(text))
-                                    .clicked()
-                                {
-                                    return Some(MessageDialogResult::Ok);
-                                }
-                                return None;
+                            if ui
+                                .add_sized(
+                                    [ui.available_width(), 20.0],
+                                    Button::new(t!("gui.button.no")),
+                                )
+                                .clicked()
+                            {
+                                return Some(MessageDialogResult::No);
                             }
-                            MessageButtons::OkCancelCustom(ok_text, cancel_text) => {
-                                if ui
-                                    .add_sized(
-                                        [ui.available_width() / 2.0, 20.0],
-                                        Button::new(ok_text),
-                                    )
-                                    .clicked()
-                                {
-                                    return Some(MessageDialogResult::Ok);
-                                }
-                                if ui
-                                    .add_sized(
-                                        [ui.available_width(), 20.0],
-                                        Button::new(cancel_text),
-                                    )
-                                    .clicked()
-                                {
-                                    return Some(MessageDialogResult::Cancel);
-                                }
-                                return None;
+                            None
+                        }
+                        MessageButtons::YesNoCancel => {
+                            if ui
+                                .add_sized(
+                                    [ui.available_width() / 3.0, 20.0],
+                                    Button::new(t!("gui.button.yes")),
+                                )
+                                .clicked()
+                            {
+                                return Some(MessageDialogResult::Yes);
                             }
-                            MessageButtons::YesNoCancelCustom(yes, no, cancel) => {
-                                if ui
-                                    .add_sized([ui.available_width() / 3.0, 20.0], Button::new(yes))
-                                    .clicked()
-                                {
-                                    return Some(MessageDialogResult::Yes);
-                                }
-                                if ui
-                                    .add_sized([ui.available_width() / 2.0, 20.0], Button::new(no))
-                                    .clicked()
-                                {
-                                    return Some(MessageDialogResult::No);
-                                }
-                                if ui
-                                    .add_sized([ui.available_width(), 20.0], Button::new(cancel))
-                                    .clicked()
-                                {
-                                    return Some(MessageDialogResult::Cancel);
-                                }
-                                return None;
+                            if ui
+                                .add_sized(
+                                    [ui.available_width() / 2.0, 20.0],
+                                    Button::new(t!("gui.button.no")),
+                                )
+                                .clicked()
+                            {
+                                return Some(MessageDialogResult::No);
                             }
-                        })
-                        .inner;
+                            if ui
+                                .add_sized(
+                                    [ui.available_width(), 20.0],
+                                    Button::new(t!("gui.button.cancel")),
+                                )
+                                .clicked()
+                            {
+                                return Some(MessageDialogResult::Cancel);
+                            }
+                            None
+                        }
+                        MessageButtons::OkCustom(text) => {
+                            if ui
+                                .add_sized([ui.available_width(), 20.0], Button::new(text))
+                                .clicked()
+                            {
+                                return Some(MessageDialogResult::Ok);
+                            }
+                            None
+                        }
+                        MessageButtons::OkCancelCustom(ok_text, cancel_text) => {
+                            if ui
+                                .add_sized([ui.available_width() / 2.0, 20.0], Button::new(ok_text))
+                                .clicked()
+                            {
+                                return Some(MessageDialogResult::Ok);
+                            }
+                            if ui
+                                .add_sized([ui.available_width(), 20.0], Button::new(cancel_text))
+                                .clicked()
+                            {
+                                return Some(MessageDialogResult::Cancel);
+                            }
+                            None
+                        }
+                        MessageButtons::YesNoCancelCustom(yes, no, cancel) => {
+                            if ui
+                                .add_sized([ui.available_width() / 3.0, 20.0], Button::new(yes))
+                                .clicked()
+                            {
+                                return Some(MessageDialogResult::Yes);
+                            }
+                            if ui
+                                .add_sized([ui.available_width() / 2.0, 20.0], Button::new(no))
+                                .clicked()
+                            {
+                                return Some(MessageDialogResult::No);
+                            }
+                            if ui
+                                .add_sized([ui.available_width(), 20.0], Button::new(cancel))
+                                .clicked()
+                            {
+                                return Some(MessageDialogResult::Cancel);
+                            }
+                            None
+                        }
+                    })
+                    .inner
                 });
             if let Some(result) = remove.inner {
                 let m = self.modals.remove(i);

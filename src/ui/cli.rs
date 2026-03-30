@@ -174,7 +174,7 @@ pub async fn run() {
 }
 
 async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError> {
-    if let Some(_) = matches.subcommand_matches("intermediary-generations") {
+    if matches.subcommand_matches("intermediary-generations").is_some() {
         let generations = crate::net::meta::fetch_intermediary_generations().await?;
         let line1 = format!("Latest Generation: {}", generations.latest);
         let line2 = format!("Stable Generation: {}", generations.stable);
@@ -191,7 +191,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         return Ok(InstallationResult::NotInstalled);
     }
     if let Some(matches) = matches.subcommand_matches("loader-versions") {
-        let generation = matches.get_one::<u32>("gen").map(|u| *u);
+        let generation = matches.get_one::<u32>("gen").copied();
         if let Some(g) = generation {
             print_note_intermediary_generation(g);
         }
@@ -210,7 +210,7 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
             loader_type.get_localized_name(),
             versions
                 .get(&loader_type)
-                .and_then(|list| list.get(0))
+                .and_then(|list| list.first())
                 .map(|v| v.version.clone())
                 .unwrap_or("<not available>".to_owned())
         );
@@ -312,18 +312,15 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
         pb.set_position(0);
 
         while !fut.is_finished() || !recv.is_empty() {
-            match recv.try_recv() {
-                Ok((prog, msg)) => {
-                    if !msg.is_empty() {
-                        pb.println(msg);
-                    }
-                    pb.set_position((prog * 100.0) as u64);
+            if let Ok((prog, msg)) = recv.try_recv() {
+                if !msg.is_empty() {
+                    pb.println(msg);
                 }
-                Err(_) => {}
+                pb.set_position((prog * 100.0) as u64);
             }
         }
         pb.finish_and_clear();
-        return fut.await.unwrap();
+        fut.await.unwrap()
     }
 }
 
@@ -452,11 +449,10 @@ async fn do_install(
         let loader_versions = all_loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let output_dir = matches.get_one::<PathBuf>("dir").unwrap().clone();
-        let copy_profile_path = matches
+        let copy_profile_path = *matches
             .get_one::<bool>("copy-profile-path")
-            .unwrap()
-            .clone();
-        let generate_zip = matches.get_one::<bool>("generate-zip").unwrap().clone();
+            .unwrap();
+        let generate_zip = *matches.get_one::<bool>("generate-zip").unwrap();
         let exclude_flap = matches.get_flag("exclude-flap");
         if exclude_flap {
             print_note_excluding_flap(&send);
@@ -483,7 +479,7 @@ async fn do_install(
 async fn get_minecraft_information(
     matches: &ArgMatches,
 ) -> Result<MinecraftInformation, InstallerError> {
-    let generation = matches.get_one::<u32>("gen").map(|u| *u);
+    let generation = matches.get_one::<u32>("gen").copied();
     if let Some(g) = generation {
         print_note_intermediary_generation(g);
     }
@@ -570,7 +566,7 @@ fn get_loader_version(
     let arg = matches.get_one::<String>("loader-version").unwrap();
 
     if *arg == "latest" {
-        return versions.get(0).map(|v| v.clone()).ok_or(InstallerError(
+        return versions.first().cloned().ok_or(InstallerError(
             "Failed to find loader version in list".to_owned(),
         ));
     }

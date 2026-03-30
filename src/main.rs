@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_arguments)]
 mod actions;
 mod errors;
 mod net;
@@ -50,7 +51,7 @@ async fn start_installer() {
             #[cfg(windows)]
             hide_console_ng::hide_console();
             log::info!("Ornithe Installer v{}", VERSION);
-            if let Ok(_) = crate::ui::gui::run().await {
+            if crate::ui::gui::run().await.is_ok() {
                 return;
             }
             #[cfg(windows)]
