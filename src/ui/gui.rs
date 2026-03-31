@@ -524,7 +524,7 @@ impl App {
                 &mut self.minecraft_version_dropdown_open,
             )
             .max_height(130.0)
-            .desired_width(170.0)
+            .desired_width((ui.available_width() / 2.0).min(170.0))
             .hint_text(RichText::from(t!("gui.ui.search_available_versions")))
             .ui(ui);
 
@@ -537,12 +537,21 @@ impl App {
                 );
             }
 
+            let available_width = ui.available_width();
             let snapshots_clicked = ui
-                .checkbox(&mut self.show_snapshots, t!("gui.ui.checkbox.snapshots"))
-                .clicked();
+                .scope(|ui| {
+                    ui.set_max_width(available_width / 2.0);
+                    ui.checkbox(&mut self.show_snapshots, t!("gui.ui.checkbox.snapshots"))
+                        .clicked()
+                })
+                .inner;
             let historical_clicked = ui
-                .checkbox(&mut self.show_historical, t!("gui.ui.checkbox.historical"))
-                .clicked();
+                .scope(|ui| {
+                    ui.set_max_width(available_width / 2.0);
+                    ui.checkbox(&mut self.show_historical, t!("gui.ui.checkbox.historical"))
+                        .clicked()
+                })
+                .inner;
 
             if snapshots_clicked || historical_clicked {
                 self.filter_minecraft_versions();
@@ -626,7 +635,6 @@ impl App {
                         .changed();
                     changed
                 });
-
             ui.label(t!("gui.ui.loader_version"));
             ComboBox::from_id_salt("loader_version")
                 .height(130.0)
@@ -1055,7 +1063,6 @@ impl eframe::App for App {
         }
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.style_mut().interaction.selectable_labels = false;
-            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
             ui.add_enabled_ui(!self.file_picker_open, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.heading(t!("gui.ui.title"));
@@ -1065,40 +1072,48 @@ impl eframe::App for App {
                     self.add_output(ui);
                     return;
                 }
-                self.add_language_selector(ui);
+                ScrollArea::both()
+                    .max_width(ui.available_width())
+                    .max_height(ui.available_height())
+                    .show(ui, |ui| {
+                        ui.set_min_width(600.0 / 1.5);
+                        ui.set_min_height(ui.available_height());
+                        self.add_language_selector(ui);
 
-                ui.vertical(|ui| {
-                    self.add_environment_options(ui);
+                        ui.vertical(|ui| {
+                            self.add_environment_options(ui);
 
-                    ui.add_space(15.0);
-                    self.add_minecraft_version(ui);
-                    ui.add_space(15.0);
-                    self.add_loader(ui);
+                            ui.add_space(15.0);
+                            self.add_minecraft_version(ui);
+                            ui.add_space(15.0);
+                            self.add_loader(ui);
 
-                    #[cfg(not(target_arch = "wasm32"))]
-                    {
+                            #[cfg(not(target_arch = "wasm32"))]
+                            {
+                                ui.add_space(15.0);
+                                self.add_location_picker(_frame, ui);
+                            }
+                        });
+
                         ui.add_space(15.0);
-                        self.add_location_picker(_frame, ui);
-                    }
-                });
+                        self.add_additional_options(ui);
 
-                ui.add_space(15.0);
-                self.add_additional_options(ui);
-
-                ui.add_space(15.0);
-                ui.vertical_centered(|ui| {
-                    #[cfg(target_arch = "wasm32")]
-                    let install_text = t!("gui.button.install_web");
-                    #[cfg(not(target_arch = "wasm32"))]
-                    let install_text = t!("gui.button.install");
-                    if Button::new(RichText::new(install_text).heading())
-                        .min_size(Vec2::new(100.0, 0.0))
-                        .ui(ui)
-                        .clicked()
-                    {
-                        self.run_installation();
-                    }
-                });
+                        ui.add_space(15.0);
+                        ui.vertical_centered(|ui| {
+                            #[cfg(target_arch = "wasm32")]
+                            let install_text = t!("gui.button.install_web");
+                            #[cfg(not(target_arch = "wasm32"))]
+                            let install_text = t!("gui.button.install");
+                            if Button::new(RichText::new(install_text).heading())
+                                .min_size(Vec2::new(100.0, 0.0))
+                                .ui(ui)
+                                .clicked()
+                            {
+                                self.run_installation();
+                            }
+                        });
+                        ui.add_space(10.0);
+                    });
             });
         });
         if let Ok(modal) = self.modal_channel.1.try_recv() {
@@ -1108,15 +1123,17 @@ impl eframe::App for App {
         for i in 0..self.modals.len() {
             let modal = &self.modals[i];
 
-            let remove =
-                Modal::new(Id::new(modal.title.clone() + &modal.message)).show(ctx, |ui| {
-                    ui.style_mut().interaction.selectable_labels = false;
-                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+            let modal_id = Id::new(modal.title.clone() + &modal.message);
+            let remove = Modal::new(modal_id).show(ctx, |ui| {
+                ui.style_mut().interaction.selectable_labels = false;
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                ui.scope(|ui| {
+                    //ui.set_max_width(ui.available_width() - 40.0);
                     ui.vertical_centered(|ui| ui.heading(&modal.title));
                     ui.add_space(15.0);
                     ui.label(&modal.message);
                     ui.add_space(15.0);
-                    ui.set_max_width(ui.max_rect().width() - 40.0);
+                    ui.set_max_width(ui.available_width() - 40.0);
                     ui.horizontal(|ui| match &modal.buttons {
                         MessageButtons::Ok => {
                             if ui
@@ -1249,7 +1266,9 @@ impl eframe::App for App {
                         }
                     })
                     .inner
-                });
+                })
+                .inner
+            });
             if let Some(result) = remove.inner {
                 let m = self.modals.remove(i);
                 (m.after)(result);
