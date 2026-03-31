@@ -418,11 +418,7 @@ impl App {
         } else {
             t!("gui.ui.install_location")
         });
-        let mut line_rect = ui.available_rect_before_wrap();
-        line_rect.max.y = ui.cursor().min.y + 25.0;
-        line_rect.min.y -= 6.0;
-        let mut child = ui.new_child(UiBuilder::new().max_rect(line_rect));
-        child.horizontal_centered(|ui| {
+        ui.horizontal(|ui| {
             let res = ui.text_edit_singleline(match self.mode {
                 Mode::Client => &mut self.client_install_location,
                 Mode::Server => &mut self.server_install_location,
@@ -465,20 +461,14 @@ impl App {
                 });
             }
         });
-        ui.add_space(20.0);
     }
 
     fn add_environment_options(&mut self, ui: &mut egui::Ui) {
         ui.label(t!("gui.ui.environment"));
-        let mut line_rect = ui.available_rect_before_wrap();
-        line_rect.max.y = ui.cursor().min.y + 25.0;
-        line_rect.min.y -= 6.0;
-        let mut child = ui.new_child(UiBuilder::new().max_rect(line_rect));
-        ui.add_space(20.0);
-        child.horizontal_centered(|ui| {
+        ui.horizontal(|ui| {
             ui.spacing_mut().icon_width -= 4.0;
             let mut clicked = false;
-            let width = line_rect.width() / 2.0;
+            let width = ui.available_width() / 2.0;
             let prev_mode = self.mode;
             ui.scope(|ui| {
                 ui.set_max_width(width);
@@ -506,12 +496,7 @@ impl App {
 
     fn add_minecraft_version(&mut self, ui: &mut egui::Ui) {
         ui.label(t!("gui.ui.minecraft_version"));
-        let mut line_rect = ui.available_rect_before_wrap();
-        line_rect.max.y = ui.cursor().min.y + 25.0;
-        line_rect.min.y -= 6.0;
-        let mut child = ui.new_child(UiBuilder::new().max_rect(line_rect));
-
-        child.horizontal_centered(|ui| {
+        ui.horizontal(|ui| {
             let res = DropDownBox::from_iter(
                 &self.filtered_minecraft_versions,
                 "minecraft_version",
@@ -557,7 +542,6 @@ impl App {
                 self.filter_minecraft_versions();
             }
         });
-        ui.add_space(20.0);
     }
 
     fn filter_minecraft_versions(&mut self) {
@@ -599,12 +583,7 @@ impl App {
 
     fn add_loader(&mut self, ui: &mut egui::Ui) {
         ui.label(t!("gui.ui.loader"));
-        let mut line_rect = ui.available_rect_before_wrap();
-        line_rect.max.y = ui.cursor().min.y + 25.0;
-        line_rect.min.y -= 6.0;
-        let mut child = ui.new_child(UiBuilder::new().max_rect(line_rect));
-        ui.add_space(20.0);
-        child.horizontal_centered(|ui| {
+        ui.horizontal(|ui| {
             let loader_type_response = ComboBox::from_id_salt("loader_type")
                 .height(130.0)
                 .selected_text(t!(
@@ -849,12 +828,8 @@ impl App {
     }
 
     fn add_additional_options(&mut self, ui: &mut egui::Ui) {
-        let mut line_rect = ui.available_rect_before_wrap();
-        line_rect.max.y = ui.cursor().min.y + 25.0;
-        line_rect.min.y -= 6.0;
-        let mut child = ui.new_child(UiBuilder::new().max_rect(line_rect));
-        ui.add_space(20.0);
-        child.horizontal_centered(|ui| {
+        ui.horizontal(|ui| {
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
             let flap_checkbox =
                 Checkbox::new(&mut self.include_flap, t!("gui.checkbox.include_flap"));
             let flap_box_response = if self.mode == Mode::PrismLauncher {
@@ -990,9 +965,9 @@ impl App {
     }
 
     fn add_language_selector(&mut self, ui: &mut egui::Ui) {
+        let current = &*rust_i18n::locale();
         let mut child =
             ui.new_child(UiBuilder::new().layout(Layout::right_to_left(egui::Align::TOP)));
-        let current = &*rust_i18n::locale();
         child.horizontal(|ui| {
             ComboBox::from_id_salt("language")
                 .height(130.0)
@@ -1072,48 +1047,45 @@ impl eframe::App for App {
                     self.add_output(ui);
                     return;
                 }
-                ScrollArea::both()
-                    .max_width(ui.available_width())
-                    .max_height(ui.available_height())
-                    .show(ui, |ui| {
-                        ui.set_min_width(600.0 / 1.5);
-                        ui.set_min_height(ui.available_height());
-                        self.add_language_selector(ui);
+                ScrollArea::both().show(ui, |ui| {
+                    ui.set_min_height(ui.available_height());
+                    ui.set_min_width(ui.available_width());
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                    self.add_language_selector(ui);
 
-                        ui.vertical(|ui| {
-                            self.add_environment_options(ui);
+                    ui.vertical(|ui| {
+                        self.add_environment_options(ui);
 
-                            ui.add_space(15.0);
-                            self.add_minecraft_version(ui);
-                            ui.add_space(15.0);
-                            self.add_loader(ui);
-
-                            #[cfg(not(target_arch = "wasm32"))]
-                            {
-                                ui.add_space(15.0);
-                                self.add_location_picker(_frame, ui);
-                            }
-                        });
-
-                        ui.add_space(15.0);
-                        self.add_additional_options(ui);
-
-                        ui.add_space(15.0);
-                        ui.vertical_centered(|ui| {
-                            #[cfg(target_arch = "wasm32")]
-                            let install_text = t!("gui.button.install_web");
-                            #[cfg(not(target_arch = "wasm32"))]
-                            let install_text = t!("gui.button.install");
-                            if Button::new(RichText::new(install_text).heading())
-                                .min_size(Vec2::new(100.0, 0.0))
-                                .ui(ui)
-                                .clicked()
-                            {
-                                self.run_installation();
-                            }
-                        });
                         ui.add_space(10.0);
+                        self.add_minecraft_version(ui);
+                        ui.add_space(10.0);
+                        self.add_loader(ui);
+
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            ui.add_space(10.0);
+                            self.add_location_picker(_frame, ui);
+                        }
                     });
+
+                    ui.add_space(10.0);
+                    self.add_additional_options(ui);
+
+                    ui.add_space(10.0);
+                    ui.vertical_centered(|ui| {
+                        #[cfg(target_arch = "wasm32")]
+                        let install_text = t!("gui.button.install_web");
+                        #[cfg(not(target_arch = "wasm32"))]
+                        let install_text = t!("gui.button.install");
+                        if Button::new(RichText::new(install_text).heading())
+                            .min_size(Vec2::new(100.0, 0.0))
+                            .ui(ui)
+                            .clicked()
+                        {
+                            self.run_installation();
+                        }
+                    });
+                });
             });
         });
         if let Ok(modal) = self.modal_channel.1.try_recv() {
@@ -1128,7 +1100,6 @@ impl eframe::App for App {
                 ui.style_mut().interaction.selectable_labels = false;
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                 ui.scope(|ui| {
-                    //ui.set_max_width(ui.available_width() - 40.0);
                     ui.vertical_centered(|ui| ui.heading(&modal.title));
                     ui.add_space(15.0);
                     ui.label(&modal.message);
