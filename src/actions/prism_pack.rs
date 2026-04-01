@@ -389,7 +389,7 @@ async fn get_mmc_launch_json(
         }
         minecraft_arguments = combined.trim().to_owned();
 
-        traits.push("FirstThreadOnMacOs");
+        traits.push("FirstThreadOnMacOS");
     }
 
     let lwjgl_major = lwjgl_version.chars().next().unwrap();
