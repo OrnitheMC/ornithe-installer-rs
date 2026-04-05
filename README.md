@@ -18,6 +18,15 @@ in the GUI:
 - Installing & running a server in a single step
   - passing arguments to the server
   - specifying a java binary to use to run the server
+  
+### Usage - Web
+
+This project is also deployed at https://ornithemc.net/ornithe-installer-rs. 
+The web version offers all the same features but outputs are always bundled in a zip file,
+therefore pre-existing files can also not be modified (e.g. the `launcher_profiles.json` file 
+used by the official launcher in order to generate a profile).
+The CLI can also be accessed on the web and is used through query parameters. 
+These are converted into long-form arguments before being parsed as usual.
 
   
 ### Building
