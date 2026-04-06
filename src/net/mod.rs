@@ -21,9 +21,10 @@ pub static UNCONFIGURED_CLIENT: std::sync::LazyLock<reqwest::Client> =
 pub async fn download_file(url: &str, output: &std::path::PathBuf) -> Result<(), InstallerError> {
     let bytes = get_bytes(url).await?;
     if let Some(parent) = output.parent()
-        && !std::fs::exists(parent)? {
-            std::fs::create_dir_all(parent)?;
-        }
+        && !std::fs::exists(parent)?
+    {
+        std::fs::create_dir_all(parent)?;
+    }
     if std::fs::exists(output).unwrap_or(false) {
         std::fs::remove_file(output)?;
     }

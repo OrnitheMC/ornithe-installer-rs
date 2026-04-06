@@ -170,10 +170,11 @@ fn load_fonts_from_fontconfig(
         platform_fonts.iter().for_each(|(language, font_names)| {
             for font_name in font_names {
                 if let Some(font) = fc.find(font_name, None)
-                    && let Ok(data) = std::fs::read(font.path) {
-                        result.insert(language.to_string(), FontData::from_owned(data));
-                        break;
-                    }
+                    && let Ok(data) = std::fs::read(font.path)
+                {
+                    result.insert(language.to_string(), FontData::from_owned(data));
+                    break;
+                }
             }
         })
     } else {

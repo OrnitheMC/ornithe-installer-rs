@@ -174,7 +174,10 @@ pub async fn run() {
 }
 
 async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError> {
-    if matches.subcommand_matches("intermediary-generations").is_some() {
+    if matches
+        .subcommand_matches("intermediary-generations")
+        .is_some()
+    {
         let generations = crate::net::meta::fetch_intermediary_generations().await?;
         let line1 = format!("Latest Generation: {}", generations.latest);
         let line2 = format!("Stable Generation: {}", generations.stable);
@@ -449,9 +452,7 @@ async fn do_install(
         let loader_versions = all_loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let output_dir = matches.get_one::<PathBuf>("dir").unwrap().clone();
-        let copy_profile_path = *matches
-            .get_one::<bool>("copy-profile-path")
-            .unwrap();
+        let copy_profile_path = *matches.get_one::<bool>("copy-profile-path").unwrap();
         let generate_zip = *matches.get_one::<bool>("generate-zip").unwrap();
         let exclude_flap = matches.get_flag("exclude-flap");
         if exclude_flap {

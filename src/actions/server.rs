@@ -103,7 +103,7 @@ async fn install_path(
     #[cfg(not(target_arch = "wasm32"))]
     let location = location.canonicalize()?;
     #[cfg(target_arch = "wasm32")]
-    let location = PathBuf::new();
+    let location = PathBuf::from("/");
 
     #[cfg(not(target_arch = "wasm32"))]
     let clear_paths = [location.join(".fabric"), location.join(".quilt")];
