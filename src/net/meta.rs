@@ -102,13 +102,7 @@ pub async fn fetch_launch_json(
     text["inheritsFrom"] =
         Value::String(manifest::vanilla_profile_name(&intermediary.version, generation).await?);
 
-    let library_upgrades_route = match generation {
-        Some(g) => format!("/v3/versions/gen{}/libraries/{}", g, &intermediary.version),
-        None => format!("/v3/versions/libraries/{}", &intermediary.version),
-    };
-    let library_upgrades =
-        super::get_json::<Vec<ProfileJsonLibrary>>(META_URL.to_owned() + &library_upgrades_route)
-            .await?;
+    let library_upgrades = fetch_profile_libraries(generation, &intermediary.version).await?;
 
     if let Some(libraries) = text["libraries"].as_array_mut() {
         for lib in &mut *libraries {
