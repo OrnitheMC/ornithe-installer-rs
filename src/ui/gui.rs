@@ -832,11 +832,12 @@ impl App {
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
             let flap_checkbox =
                 Checkbox::new(&mut self.include_flap, t!("gui.checkbox.include_flap"));
-            let flap_box_response = if self.mode == Mode::PrismLauncher {
-                ui.add_sized([ui.available_width() / 5.0, 20.0], flap_checkbox)
-            } else {
-                ui.add(flap_checkbox)
-            };
+            let flap_box_response =
+                if self.mode == Mode::PrismLauncher && !cfg!(target_arch = "wasm32") {
+                    ui.add_sized([ui.available_width() / 5.0, 20.0], flap_checkbox)
+                } else {
+                    ui.add(flap_checkbox)
+                };
             if flap_box_response.has_focus() || flap_box_response.hovered() {
                 Tooltip::for_widget(&flap_box_response)
                     .show(|ui| ui.label(t!("gui.flap.description")));
@@ -856,18 +857,20 @@ impl App {
                     );
                 }
                 Mode::PrismLauncher => {
-                    ui.add_sized(
-                        [ui.available_width() * 2.0 / 3.0, 20.0],
-                        Checkbox::new(
-                            &mut self.copy_generated_location,
-                            t!("gui.checkbox.copy_profile_path"),
-                        ),
-                    );
                     #[cfg(not(target_arch = "wasm32"))]
-                    ui.checkbox(
-                        &mut self.generate_zip,
-                        t!("gui.checkbox.generate_instance_zip"),
-                    );
+                    {
+                        ui.add_sized(
+                            [ui.available_width() * 2.0 / 3.0, 20.0],
+                            Checkbox::new(
+                                &mut self.copy_generated_location,
+                                t!("gui.checkbox.copy_profile_path"),
+                            ),
+                        );
+                        ui.checkbox(
+                            &mut self.generate_zip,
+                            t!("gui.checkbox.generate_instance_zip"),
+                        );
+                    }
                 }
             }
         });

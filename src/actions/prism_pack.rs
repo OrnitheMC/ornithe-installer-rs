@@ -268,20 +268,12 @@ pub async fn install(
                 .map_err(|_| InstallerError::from(t!("mmc.error.failed_to_copy_path")))?;
         }
     }
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(
+        not(any(unix, windows)),
+        any(target_os = "android", target_arch = "wasm32")
+    ))]
     {
-        if copy_profile_path {
-            if let Some(window) = web_sys::window() {
-                let navigator = window.navigator();
-                wasm_bindgen_futures::JsFuture::from(
-                    navigator
-                        .clipboard()
-                        .write_text(&output_file.to_string_lossy()),
-                )
-                .await
-                .map_err(|_| InstallerError::from(t!("mmc.error.failed_to_copy_path")))?;
-            }
-        }
+        let _ = copy_profile_path;
     }
 
     let _ = sender.send((1.0, t!("mmc.info.done").into()));

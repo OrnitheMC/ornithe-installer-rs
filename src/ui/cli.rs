@@ -41,11 +41,11 @@ pub async fn run() {
                 )),
         )
         .subcommand(
-            add_arguments(Command::new("mmc")
-                .visible_alias("prism")
-                .long_flag("mmc")
-                .visible_long_flag_alias("prism")
-                .about("Generate an instance for MultiMC/PrismLauncher")
+            add_arguments(Command::new("prism")
+                .long_flag("prism")
+                .alias("mmc")
+                .long_flag_alias("mmc")
+                .about("Generate an instance for PrismLauncher")
                 .arg(
                     arg!(-d --dir <DIR> "Output directory")
                         .default_value(super::current_location())
@@ -67,8 +67,8 @@ pub async fn run() {
                         .value_parser(value_parser!(PathBuf)),
                 )
                 .arg(arg!(--"download-minecraft" "Whether to download the minecraft server jar")
-                    .alias("download-server")
-                    .alias("download")
+                    .visible_alias("download-server")
+                    .visible_alias("download")
                 )
                 .subcommand(Command::new("run").about("Install and run the server")
                     .arg(arg!(--args <ARGS> "Java arguments to pass to the server (before the server jar)"))
@@ -106,7 +106,7 @@ pub async fn run() {
         let location = web_sys::window().expect("Window not available").location();
         let query = location.search().unwrap_or(String::new());
         let query_presplit = format!("--{}", query[1..].replace("&", " --").replace("=", " "));
-        let query_cleaned = query_presplit.split(" ").collect::<Vec<&str>>();
+        let query_cleaned = query_presplit.trim().split(" ").collect::<Vec<&str>>();
         let res = command
             .no_binary_name(true)
             .bin_name("ornithe-installer-rs")
@@ -443,7 +443,7 @@ async fn do_install(
         return Ok(InstallationResult::Installed);
     }
 
-    if let Some(matches) = matches.subcommand_matches("mmc") {
+    if let Some(matches) = matches.subcommand_matches("prism") {
         let (minecraft_version, intermediary, info) =
             get_minecraft_version(matches, GameSide::Server).await?;
         let loader_type = get_loader_type(matches)?;
@@ -452,7 +452,11 @@ async fn do_install(
         let loader_versions = all_loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let output_dir = matches.get_one::<PathBuf>("dir").unwrap().clone();
-        let copy_profile_path = *matches.get_one::<bool>("copy-profile-path").unwrap();
+        let mut copy_profile_path = *matches.get_one::<bool>("copy-profile-path").unwrap();
+        if cfg!(target_arch = "wasm32") && copy_profile_path {
+            copy_profile_path = false;
+            log::info!("Ignoring 'copy-profile-path' option as it is of no value!")
+        }
         let generate_zip = *matches.get_one::<bool>("generate-zip").unwrap();
         let exclude_flap = matches.get_flag("exclude-flap");
         if exclude_flap {
