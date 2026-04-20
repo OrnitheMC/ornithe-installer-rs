@@ -180,7 +180,7 @@ jobs:
           node-version: "latest"
           cache: "npm"
       - run: rustup target add wasm32-unknown-unknown
-      - run: cargo install wasm-bindgen-cli
+      - run: cargo install wasm-bindgen-cli --version 0.2.118
       - run: npm i
       - name: Build web target
         run: npm run build

@@ -1,6 +1,6 @@
 {
     "_version": 1,
-    "language_name": "François",
+    "language_name": "Français",
     "gui.ui.title": "Installateur Ornithe",
     "gui.ui.language": "Langue : ",
     "gui.error.no_available_minecraft_versions":"Aucune version disponible de Minecraft n'a été trouvée. Assurez-vous d'être connecté à Internet !",
