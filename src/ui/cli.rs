@@ -445,7 +445,7 @@ async fn do_install(
 
     if let Some(matches) = matches.subcommand_matches("prism") {
         let (minecraft_version, intermediary, info) =
-            get_minecraft_version(matches, GameSide::Server).await?;
+            get_minecraft_version(matches, GameSide::Client).await?;
         let loader_type = get_loader_type(matches)?;
         let all_loader_versions =
             crate::net::meta::fetch_loader_versions(&info.calamus_generation).await?;
