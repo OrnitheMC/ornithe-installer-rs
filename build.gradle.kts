@@ -32,13 +32,13 @@ publishing {
             artifact {
                 file(
                     "$projectDir/target/$target/release/ornithe-installer-rs." + if (os?.contains("windows") == true) // thanks kotlin
-                        "exe" else "bin"
+                        "exe" else ""
                 )
             }
             artifact (
                 file(
                     "$projectDir/target/$target/release/ornithe-installer-rs-cli." + if (os?.contains("windows") == true) // thanks kotlin
-                        "exe" else "bin"
+                        "exe" else ""
                 )
             ) {
                 classifier = "cli"

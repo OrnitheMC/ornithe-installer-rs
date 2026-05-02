@@ -141,8 +141,10 @@ pub async fn run() {
                 }
                 Err(e) => {
                     log::warn!("Error while running Ornithe Installer CLI: {}", &e.0);
-                    loading_text
-                        .set_inner_html(&format!("<h3>Encountered error:</h3><p>{}</p>", &e.0));
+                    loading_text.set_inner_html(&format!(
+                        "<h3>Encountered error:</h3><p style=\"overflow: scroll;\">{}</p>",
+                        &e.0
+                    ));
                 }
             },
             Err(error) => {

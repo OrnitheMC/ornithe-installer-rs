@@ -93,14 +93,12 @@ jobs:
       - run: rustup target add ${{ matrix.target }}
         # Build the CLI only binary
       - run: cargo build --no-default-features --release --target ${{ matrix.target }}
-      - run: mv "target/${{ matrix.target }}/release/ornithe-installer-rs" "target/${{ matrix.target }}/release/ornithe-installer-rs-cli.bin"
+      - run: mv "target/${{ matrix.target }}/release/ornithe-installer-rs" "target/${{ matrix.target }}/release/ornithe-installer-rs-cli"
         if: runner.os != 'Windows'
       - run: mv "target/${{ matrix.target }}/release/ornithe-installer-rs.exe" "target/${{ matrix.target }}/release/ornithe-installer-rs-cli.exe"
         if: runner.os == 'Windows'
         # Regular build with GUI
       - run: cargo build --release --target ${{ matrix.target }}
-      - run: mv "target/${{ matrix.target }}/release/ornithe-installer-rs" "target/${{ matrix.target }}/release/ornithe-installer-rs.bin"
-        if: runner.os != 'Windows'
       - uses: actions/upload-artifact@v7
         with:
           name: Artifacts ${{ matrix.target }}
@@ -150,16 +148,11 @@ jobs:
       - run: cargo zigbuild --no-default-features --release --target universal2-apple-darwin
       - name: Rename CLI Binaries
         run: |
-          mv "target/aarch64-apple-darwin/release/ornithe-installer-rs" "target/aarch64-apple-darwin/release/ornithe-installer-rs-cli.bin"
-          mv "target/x86_64-apple-darwin/release/ornithe-installer-rs" "target/x86_64-apple-darwin/release/ornithe-installer-rs-cli.bin"
-          mv "target/universal2-apple-darwin/release/ornithe-installer-rs" "target/universal2-apple-darwin/release/ornithe-installer-rs-cli.bin"
+          mv "target/aarch64-apple-darwin/release/ornithe-installer-rs" "target/aarch64-apple-darwin/release/ornithe-installer-rs-cli"
+          mv "target/x86_64-apple-darwin/release/ornithe-installer-rs" "target/x86_64-apple-darwin/release/ornithe-installer-rs-cli"
+          mv "target/universal2-apple-darwin/release/ornithe-installer-rs" "target/universal2-apple-darwin/release/ornithe-installer-rs-cli"
         # Regular build with GUI
       - run: cargo zigbuild --release --target universal2-apple-darwin
-      - name: Rename Binaries
-        run: |
-          mv "target/aarch64-apple-darwin/release/ornithe-installer-rs" "target/aarch64-apple-darwin/release/ornithe-installer-rs.bin"
-          mv "target/x86_64-apple-darwin/release/ornithe-installer-rs" "target/x86_64-apple-darwin/release/ornithe-installer-rs.bin"
-          mv "target/universal2-apple-darwin/release/ornithe-installer-rs" "target/universal2-apple-darwin/release/ornithe-installer-rs.bin"
       - uses: actions/upload-artifact@v7
         with:
           name: Artifacts macos
@@ -233,10 +226,9 @@ jobs:
       - run: cargo install cross --git https://github.com/cross-rs/cross
         # Build the CLI only binary
       - run: cross build --no-default-features --release --target ${{ matrix.target }}
-      - run: mv "target/${{ matrix.target }}/release/ornithe-installer-rs" "target/${{ matrix.target }}/release/ornithe-installer-rs-cli.bin"
+      - run: mv "target/${{ matrix.target }}/release/ornithe-installer-rs" "target/${{ matrix.target }}/release/ornithe-installer-rs-cli"
         # Regular build with GUI
       - run: cross build --release --target ${{ matrix.target }}
-      - run: mv "target/${{ matrix.target }}/release/ornithe-installer-rs" "target/${{ matrix.target }}/release/ornithe-installer-rs.bin"
       - uses: actions/upload-artifact@v7
         with:
           name: Artifacts ${{ matrix.target }}
