@@ -123,13 +123,49 @@ async fn load_fonts_from_url(
     platform_fonts: &PlatformFonts,
     result: &mut HashMap<String, FontData>,
 ) {
+    use wasm_bindgen::JsCast;
+    use web_sys::Cache;
+
+    let cache = web_sys::window()
+        .expect("Window not available")
+        .caches()
+        .expect("CacheStorage not available")
+        .open(env!("CARGO_PKG_NAME"))
+        .await
+        .map(|v| v.dyn_into::<Cache>())
+        .flatten()
+        .expect("Cache not available");
     for (language, font_urls) in platform_fonts {
         for url in font_urls {
-            let loc = url.clone();
-            let lang = language.clone();
-            if let Ok(b) = crate::net::get_bytes_client(&crate::net::UNCONFIGURED_CLIENT, loc).await
+            use web_sys::Response;
+
+            if let Ok(stored) = cache
+                .match_with_str(url)
+                .await
+                .map(|v| v.dyn_into::<Response>())
+                .flatten()
             {
-                result.insert(lang, FontData::from_owned(b));
+                if let Some(buf) = stored.array_buffer().unwrap().await.ok() {
+                    use web_sys::js_sys::Uint8Array;
+
+                    result.insert(
+                        language.clone(),
+                        FontData::from_owned(Uint8Array::new(&buf).to_vec()),
+                    );
+                    log::info!("Loaded font for {language} ({url}) from cache");
+                    continue;
+                }
+            }
+            if let Ok(b) = crate::net::get_bytes_client(&crate::net::UNCONFIGURED_CLIENT, url).await
+            {
+                let mut response_buf = b.clone();
+                let _ = cache
+                    .put_with_str(
+                        url,
+                        &Response::new_with_opt_u8_array(Some(&mut response_buf)).unwrap(),
+                    )
+                    .await;
+                result.insert(language.clone(), FontData::from_owned(b));
             }
         }
     }
