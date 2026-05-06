@@ -100,6 +100,12 @@ async fn create_window() -> Result<(), InstallerError> {
             .dyn_into::<web_sys::HtmlCanvasElement>()
             .expect("main_canvas was not a HtmlCanvasElement");
 
+        if window.location().hash().unwrap_or_default() == "#rfp" {
+            let style = canvas.style();
+            let _ = style.set_property_with_priority("scale", "0.5", "important");
+            let _ = style.set_property("translate", "-25% -25%");
+        }
+
         let start_result = eframe::WebRunner::new()
             .start(
                 canvas.clone(),
@@ -195,6 +201,8 @@ struct App {
     #[cfg(target_arch = "wasm32")]
     app_canvas: web_sys::HtmlCanvasElement,
     request_main_content_sizing_pass: bool,
+    #[cfg(target_arch = "wasm32")]
+    narrow_viewport: bool,
 }
 
 struct ModalPopup {
@@ -419,7 +427,9 @@ impl App {
             modal_channel: std::sync::mpsc::channel(),
             #[cfg(target_arch = "wasm32")]
             app_canvas,
-            request_main_content_sizing_pass: false,
+            request_main_content_sizing_pass: true,
+            #[cfg(target_arch = "wasm32")]
+            narrow_viewport: false,
         };
         app.filter_minecraft_versions();
         Ok(app)
@@ -486,26 +496,20 @@ impl App {
         ui.horizontal(|ui| {
             ui.spacing_mut().icon_width -= 4.0;
             let mut clicked = false;
-            let width = ui.available_width() / 2.0;
             let prev_mode = self.mode;
-            ui.scope(|ui| {
-                ui.set_max_width(width);
-                clicked |= ui
-                    .radio_value(&mut self.mode, Mode::Client, t!("gui.mode.client"))
-                    .clicked();
-            });
-            ui.scope(|ui| {
-                ui.set_max_width(width);
-                clicked |= ui
-                    .radio_value(&mut self.mode, Mode::PrismLauncher, t!("gui.mode.prism"))
-                    .clicked();
-            });
-            ui.scope(|ui| {
-                ui.set_max_width(width);
-                clicked |= ui
-                    .radio_value(&mut self.mode, Mode::Server, t!("gui.mode.server"))
-                    .clicked();
-            });
+
+            clicked |= ui
+                .radio_value(&mut self.mode, Mode::Client, t!("gui.mode.client"))
+                .clicked();
+
+            clicked |= ui
+                .radio_value(&mut self.mode, Mode::PrismLauncher, t!("gui.mode.prism"))
+                .clicked();
+
+            clicked |= ui
+                .radio_value(&mut self.mode, Mode::Server, t!("gui.mode.server"))
+                .clicked();
+
             if clicked && prev_mode != self.mode {
                 self.filter_minecraft_versions();
             }
@@ -540,21 +544,13 @@ impl App {
                 );
             }
 
-            let available_width = ui.available_width();
             let snapshots_clicked = ui
-                .scope(|ui| {
-                    ui.set_max_width(available_width / 2.0);
-                    ui.checkbox(&mut self.show_snapshots, t!("gui.ui.checkbox.snapshots"))
-                        .clicked()
-                })
-                .inner;
+                .checkbox(&mut self.show_snapshots, t!("gui.ui.checkbox.snapshots"))
+                .clicked();
+
             let historical_clicked = ui
-                .scope(|ui| {
-                    ui.set_max_width(available_width / 2.0);
-                    ui.checkbox(&mut self.show_historical, t!("gui.ui.checkbox.historical"))
-                        .clicked()
-                })
-                .inner;
+                .checkbox(&mut self.show_historical, t!("gui.ui.checkbox.historical"))
+                .clicked();
 
             if snapshots_clicked || historical_clicked {
                 self.filter_minecraft_versions();
@@ -847,7 +843,6 @@ impl App {
 
     fn add_additional_options(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
             let flap_checkbox =
                 Checkbox::new(&mut self.include_flap, t!("gui.checkbox.include_flap"));
             let flap_box_response =
@@ -993,16 +988,18 @@ impl App {
             ComboBox::from_id_salt("language")
                 .height(130.0)
                 .width(20.0)
-                .selected_text(t!(format!("language_name"), locale = current))
+                .selected_text(t!("language_name", locale = current))
                 .show_ui(ui, |ui| {
                     for ele in rust_i18n::available_locales!() {
-                        let mut name = t!(format!("language_name"), locale = ele);
-                        if name == t!(format!("language_name"), locale = "en") && ele != "en" {
+                        let mut name = t!("language_name", locale = ele);
+                        if name == t!("language_name", locale = "en") && ele != "en" {
                             name = std::borrow::Cow::Borrowed(ele);
                         }
                         if ui.selectable_label(ele == current, name).clicked() {
-                            rust_i18n::set_locale(ele);
-                            self.request_main_content_sizing_pass = true;
+                            if ele != current {
+                                rust_i18n::set_locale(ele);
+                                self.request_main_content_sizing_pass = true;
+                            }
                         }
                     }
                 });
@@ -1042,9 +1039,9 @@ impl App {
         }
     }
 
-    fn add_main_contents(
+    fn add_main_options(
         &mut self,
-        ui: &mut egui::Ui,
+        ui: &mut Ui,
         #[cfg(not(target_arch = "wasm32"))] frame: &mut eframe::Frame,
     ) {
         ui.vertical(|ui| {
@@ -1064,6 +1061,24 @@ impl App {
 
         ui.add_space(10.0);
         self.add_additional_options(ui);
+    }
+    fn add_main_contents(
+        &mut self,
+        ui: &mut Ui,
+        #[cfg(not(target_arch = "wasm32"))] frame: &mut eframe::Frame,
+    ) {
+        #[cfg(target_arch = "wasm32")]
+        if self.narrow_viewport {
+            ui.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
+            ScrollArea::both()
+                .max_height(ui.available_height() - 60.0)
+                .max_width(ui.ctx().content_rect().width() - 15.0)
+                .show(ui, |ui| self.add_main_options(ui));
+        } else {
+            self.add_main_options(ui);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        self.add_main_options(ui, frame);
 
         ui.add_space(10.0);
         ui.vertical_centered(|ui| {
@@ -1086,6 +1101,9 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.set_zoom_factor(1.5);
         ctx.options_mut(|opt| opt.fallback_theme = Theme::Light);
+        ctx.style_mut(|style| {
+            style.interaction.selectable_labels = false;
+        });
 
         if let Ok(result) = self.file_picker_channel.1.try_recv() {
             self.file_picker_open = false;
@@ -1098,64 +1116,93 @@ impl eframe::App for App {
             }
         }
         // This takes care of drawing the background, an Area doesn't have one unfortunately
-        egui::CentralPanel::default().show(ctx, |_| {});
+        let main_area_id = "main".into();
+        #[cfg(target_arch = "wasm32")]
+        {
+            use wasm_bindgen::JsCast as _;
+            use web_sys::HtmlElement;
+
+            let window = web_sys::window().expect("Window not available");
+            let width = window
+                .document()
+                .expect("Document not available")
+                .document_element()
+                .map(|e| e.dyn_into::<HtmlElement>().ok())
+                .flatten()
+                .expect("Root node not available")
+                .client_width() as f32;
+            self.narrow_viewport = ctx
+                .memory(|m| m.area_rect(main_area_id))
+                .map(|r| width < r.width() * 1.5)
+                .unwrap_or_default()
+        };
         let sizing_pass = self.request_main_content_sizing_pass;
         self.request_main_content_sizing_pass = false;
-        let content_response = egui::Area::new("main".into())
+        let content_response = egui::Area::new(main_area_id)
             .sizing_pass(sizing_pass)
             .default_width(630.0 * 1.5)
-            .fixed_pos(&[5.0, 5.0])
+            .movable(false)
             .order(egui::Order::Background)
             .show(ctx, |ui| {
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                 ui.style_mut().interaction.selectable_labels = false;
+                Frame::central_panel(ui.style())
+                    .show(ui, |ui| {
+                        ui.add_enabled_ui(!self.file_picker_open, |ui| {
+                            ui.vertical_centered(|ui| {
+                                ui.heading(t!("gui.ui.title"));
+                            });
+                            ui.add_space(15.0);
+                            if self.installation_task.is_some() {
+                                self.add_output(ui);
+                                return;
+                            }
 
-                ui.add_enabled_ui(!self.file_picker_open, |ui| {
-                    ui.vertical_centered(|ui| {
-                        ui.heading(t!("gui.ui.title"));
-                    });
-                    ui.add_space(15.0);
-                    if self.installation_task.is_some() {
-                        self.add_output(ui);
-                        return;
-                    }
-
-                    #[cfg(target_arch = "wasm32")]
-                    self.add_main_contents(ui);
-                    #[cfg(not(target_arch = "wasm32"))]
-                    self.add_main_contents(ui, _frame)
-                })
-                .response
-            });
-        let used_width = content_response.response.rect.width()
-            + 10.0
-            + (ctx.viewport_rect().width() - ctx.content_rect().width());
+                            #[cfg(target_arch = "wasm32")]
+                            self.add_main_contents(ui);
+                            #[cfg(not(target_arch = "wasm32"))]
+                            self.add_main_contents(ui, _frame)
+                        });
+                    })
+                    .response
+            })
+            .response
+            .rect;
+        let used_width =
+            content_response.width() + (ctx.viewport_rect().width() - ctx.content_rect().width());
+        let used_height = content_response.height()
+            + (ctx.viewport_rect().height() - ctx.content_rect().height());
         #[cfg(target_arch = "wasm32")]
         {
-            let mut used = used_width * 1.5;
+            let mut used_w = used_width * 1.5;
+            let mut used_h = used_height * 1.5;
             let mut max = 100;
             let loc = &_frame.info().web_info.location;
             if loc.hash == "#rfp" {
-                used *= 2.0;
+                used_w *= 2.0;
+                used_h *= 2.0;
                 max *= 2;
             }
 
             let _ = self
                 .app_canvas
                 .style()
-                .set_property("width", &format!("calc(min({max}%, {used}px))"));
+                .set_property("width", &format!("calc(min({max}%, {used_w}px))"));
+            let _ = self
+                .app_canvas
+                .style()
+                .set_property("height", &format!("calc(min({max}%, {used_h}px))"));
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-                [used_width, ctx.viewport_rect().height()].into(),
+                [used_width, used_height].into(),
             ));
         }
         egui::Area::new("language_selector".into())
             .anchor(Align2::RIGHT_TOP, [-5.0, 30.0])
             .order(egui::Order::Middle)
             .show(ctx, |ui| {
-                ui.style_mut().interaction.selectable_labels = false;
                 ui.add_enabled_ui(!self.file_picker_open, |ui| {
                     self.add_language_selector(ui);
                 });
@@ -1170,7 +1217,6 @@ impl eframe::App for App {
 
             let modal_id = Id::new(modal.title.clone() + &modal.message);
             let remove = Modal::new(modal_id).show(ctx, |ui| {
-                ui.style_mut().interaction.selectable_labels = false;
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                 ui.scope(|ui| {
                     ui.vertical_centered(|ui| ui.heading(&modal.title));
