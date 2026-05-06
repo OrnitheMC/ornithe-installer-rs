@@ -67,7 +67,7 @@ async fn create_window() -> Result<(), InstallerError> {
             .expect("The Ornithe Icon is a valid PNG file");
         let options = eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
-                .with_inner_size([630.0, 490.0])
+                .with_inner_size([630.0, 470.0])
                 .with_resizable(false)
                 .with_icon(data),
             renderer: eframe::Renderer::Wgpu,
@@ -923,7 +923,7 @@ impl App {
             progress.poll();
 
             ui.label(t!("gui.ui.output"));
-            let output_height = ui.available_height() - 60.0;
+            let output_height = ui.ctx().content_rect().height() - ui.cursor().top() - 5.0 - 60.0;
             Frame::new()
                 .inner_margin(Margin {
                     left: 0,
@@ -1133,15 +1133,17 @@ impl eframe::App for App {
         #[cfg(target_arch = "wasm32")]
         {
             let mut used = used_width * 1.5;
+            let mut max = 100;
             let loc = &_frame.info().web_info.location;
             if loc.hash == "#rfp" {
                 used *= 2.0;
+                max *= 2;
             }
 
             let _ = self
                 .app_canvas
                 .style()
-                .set_property("width", &format!("{used}px"));
+                .set_property("width", &format!("calc(min({max}%, {used}px))"));
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
