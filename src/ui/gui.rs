@@ -7,7 +7,7 @@ use std::{
 };
 
 use egui::{
-    Align, Button, Checkbox, Color32, ComboBox, FontId, Frame, Id, Layout, Margin, Modal,
+    Align, Align2, Button, Checkbox, Color32, ComboBox, FontId, Frame, Id, Layout, Margin, Modal,
     ProgressBar, Response, RichText, ScrollArea, Sense, TextEdit, Theme, Tooltip, Ui, UiBuilder,
     Vec2, Vec2b, Widget, WidgetText,
     text::{CCursor, CCursorRange},
@@ -192,6 +192,9 @@ struct App {
     include_flap: bool,
     modals: Vec<ModalPopup>,
     modal_channel: (Sender<ModalPopup>, Receiver<ModalPopup>),
+    #[cfg(target_arch = "wasm32")]
+    app_canvas: web_sys::HtmlCanvasElement,
+    request_main_content_sizing_pass: bool,
 }
 
 struct ModalPopup {
@@ -369,6 +372,18 @@ impl App {
             "Loaded versions for {} loaders",
             available_loader_versions.len()
         );
+        #[cfg(target_arch = "wasm32")]
+        let app_canvas = {
+            use eframe::wasm_bindgen::JsCast as _;
+            let window = web_sys::window().expect("No window");
+            let document = window.document().expect("No document");
+
+            document
+                .get_element_by_id("main_canvas")
+                .expect("Failed to find the_canvas_id")
+                .dyn_into::<web_sys::HtmlCanvasElement>()
+                .expect("main_canvas was not a HtmlCanvasElement")
+        };
 
         let mut app = App {
             mode: Mode::Client,
@@ -402,6 +417,9 @@ impl App {
             include_flap: true,
             modals: Vec::new(),
             modal_channel: std::sync::mpsc::channel(),
+            #[cfg(target_arch = "wasm32")]
+            app_canvas,
+            request_main_content_sizing_pass: false,
         };
         app.filter_minecraft_versions();
         Ok(app)
@@ -984,6 +1002,7 @@ impl App {
                         }
                         if ui.selectable_label(ele == current, name).clicked() {
                             rust_i18n::set_locale(ele);
+                            self.request_main_content_sizing_pass = true;
                         }
                     }
                 });
@@ -1022,6 +1041,45 @@ impl App {
             }
         }
     }
+
+    fn add_main_contents(
+        &mut self,
+        ui: &mut egui::Ui,
+        #[cfg(not(target_arch = "wasm32"))] frame: &mut eframe::Frame,
+    ) {
+        ui.vertical(|ui| {
+            self.add_environment_options(ui);
+
+            ui.add_space(10.0);
+            self.add_minecraft_version(ui);
+            ui.add_space(10.0);
+            self.add_loader(ui);
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                ui.add_space(10.0);
+                self.add_location_picker(frame, ui);
+            }
+        });
+
+        ui.add_space(10.0);
+        self.add_additional_options(ui);
+
+        ui.add_space(10.0);
+        ui.vertical_centered(|ui| {
+            #[cfg(target_arch = "wasm32")]
+            let install_text = t!("gui.button.install_web");
+            #[cfg(not(target_arch = "wasm32"))]
+            let install_text = t!("gui.button.install");
+            if Button::new(RichText::new(install_text).heading())
+                .min_size(Vec2::new(100.0, 0.0))
+                .ui(ui)
+                .clicked()
+            {
+                self.run_installation();
+            }
+        });
+    }
 }
 
 impl eframe::App for App {
@@ -1039,58 +1097,68 @@ impl eframe::App for App {
                 }
             }
         }
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.style_mut().interaction.selectable_labels = false;
-            ui.add_enabled_ui(!self.file_picker_open, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.heading(t!("gui.ui.title"));
-                });
-                ui.add_space(15.0);
-                if self.installation_task.is_some() {
-                    self.add_output(ui);
-                    return;
-                }
-                ScrollArea::both().show(ui, |ui| {
-                    ui.set_min_height(ui.available_height());
-                    ui.set_min_width(ui.available_width());
-                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-                    self.add_language_selector(ui);
+        // This takes care of drawing the background, an Area doesn't have one unfortunately
+        egui::CentralPanel::default().show(ctx, |_| {});
+        let sizing_pass = self.request_main_content_sizing_pass;
+        self.request_main_content_sizing_pass = false;
+        let content_response = egui::Area::new("main".into())
+            .sizing_pass(sizing_pass)
+            .default_width(630.0 * 1.5)
+            .fixed_pos(&[5.0, 5.0])
+            .order(egui::Order::Background)
+            .show(ctx, |ui| {
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                ui.style_mut().interaction.selectable_labels = false;
 
-                    ui.vertical(|ui| {
-                        self.add_environment_options(ui);
-
-                        ui.add_space(10.0);
-                        self.add_minecraft_version(ui);
-                        ui.add_space(10.0);
-                        self.add_loader(ui);
-
-                        #[cfg(not(target_arch = "wasm32"))]
-                        {
-                            ui.add_space(10.0);
-                            self.add_location_picker(_frame, ui);
-                        }
-                    });
-
-                    ui.add_space(10.0);
-                    self.add_additional_options(ui);
-
-                    ui.add_space(10.0);
+                ui.add_enabled_ui(!self.file_picker_open, |ui| {
                     ui.vertical_centered(|ui| {
-                        #[cfg(target_arch = "wasm32")]
-                        let install_text = t!("gui.button.install_web");
-                        #[cfg(not(target_arch = "wasm32"))]
-                        let install_text = t!("gui.button.install");
-                        if Button::new(RichText::new(install_text).heading())
-                            .min_size(Vec2::new(100.0, 0.0))
-                            .ui(ui)
-                            .clicked()
-                        {
-                            self.run_installation();
-                        }
+                        ui.heading(t!("gui.ui.title"));
                     });
+                    ui.add_space(15.0);
+                    if self.installation_task.is_some() {
+                        self.add_output(ui);
+                        return;
+                    }
+
+                    #[cfg(target_arch = "wasm32")]
+                    self.add_main_contents(ui);
+                    #[cfg(not(target_arch = "wasm32"))]
+                    self.add_main_contents(ui, _frame)
+                })
+                .response
+            });
+        let used_width = content_response.response.rect.width()
+            + 10.0
+            + (ctx.viewport_rect().width() - ctx.content_rect().width());
+        #[cfg(target_arch = "wasm32")]
+        {
+            let mut used = used_width * 1.5;
+            let loc = &_frame.info().web_info.location;
+            if loc.hash == "#rfp" {
+                used *= 2.0;
+            }
+
+            let _ = self
+                .app_canvas
+                .style()
+                .set_property("width", &format!("{used}px"));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                [used_width, ctx.viewport_rect().height()].into(),
+            ));
+        }
+        egui::Area::new("language_selector".into())
+            .anchor(Align2::RIGHT_TOP, [-5.0, 30.0])
+            .order(egui::Order::Middle)
+            .show(ctx, |ui| {
+                ui.style_mut().interaction.selectable_labels = false;
+                ui.add_enabled_ui(!self.file_picker_open, |ui| {
+                    self.add_language_selector(ui);
                 });
             });
-        });
+
         if let Ok(modal) = self.modal_channel.1.try_recv() {
             info!("Displaying dialog: {}: {}", modal.title, modal.message);
             self.modals.push(modal)
