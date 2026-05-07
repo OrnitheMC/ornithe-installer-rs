@@ -203,6 +203,8 @@ struct App {
     request_main_content_sizing_pass: bool,
     #[cfg(target_arch = "wasm32")]
     narrow_viewport: bool,
+    #[cfg(target_arch = "wasm32")]
+    small_viewport: bool,
 }
 
 struct ModalPopup {
@@ -430,6 +432,8 @@ impl App {
             request_main_content_sizing_pass: true,
             #[cfg(target_arch = "wasm32")]
             narrow_viewport: false,
+            #[cfg(target_arch = "wasm32")]
+            small_viewport: false,
         };
         app.filter_minecraft_versions();
         Ok(app)
@@ -845,12 +849,7 @@ impl App {
         ui.horizontal(|ui| {
             let flap_checkbox =
                 Checkbox::new(&mut self.include_flap, t!("gui.checkbox.include_flap"));
-            let flap_box_response =
-                if self.mode == Mode::PrismLauncher && !cfg!(target_arch = "wasm32") {
-                    ui.add_sized([ui.available_width() / 5.0, 20.0], flap_checkbox)
-                } else {
-                    ui.add(flap_checkbox)
-                };
+            let flap_box_response = ui.add(flap_checkbox);
             if flap_box_response.has_focus() || flap_box_response.hovered() {
                 Tooltip::for_widget(&flap_box_response)
                     .show(|ui| ui.label(t!("gui.flap.description")));
@@ -872,12 +871,9 @@ impl App {
                 Mode::PrismLauncher => {
                     #[cfg(not(target_arch = "wasm32"))]
                     {
-                        ui.add_sized(
-                            [ui.available_width() * 2.0 / 3.0, 20.0],
-                            Checkbox::new(
-                                &mut self.copy_generated_location,
-                                t!("gui.checkbox.copy_profile_path"),
-                            ),
+                        ui.checkbox(
+                            &mut self.copy_generated_location,
+                            t!("gui.checkbox.copy_profile_path"),
                         );
                         ui.checkbox(
                             &mut self.generate_zip,
@@ -1044,41 +1040,41 @@ impl App {
         ui: &mut Ui,
         #[cfg(not(target_arch = "wasm32"))] frame: &mut eframe::Frame,
     ) {
-        ui.vertical(|ui| {
-            self.add_environment_options(ui);
+        self.add_environment_options(ui);
 
-            ui.add_space(10.0);
-            self.add_minecraft_version(ui);
-            ui.add_space(10.0);
-            self.add_loader(ui);
+        ui.add_space(10.0);
+        self.add_minecraft_version(ui);
+        ui.add_space(10.0);
+        self.add_loader(ui);
 
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                ui.add_space(10.0);
-                self.add_location_picker(frame, ui);
-            }
-        });
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            ui.add_space(10.0);
+            self.add_location_picker(frame, ui);
+        }
 
         ui.add_space(10.0);
         self.add_additional_options(ui);
     }
-    fn add_main_contents(
-        &mut self,
-        ui: &mut Ui,
-        #[cfg(not(target_arch = "wasm32"))] frame: &mut eframe::Frame,
-    ) {
+    fn add_main_contents(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         #[cfg(target_arch = "wasm32")]
-        if self.narrow_viewport {
+        if self.narrow_viewport || self.small_viewport {
             ui.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
-            ScrollArea::both()
-                .max_height(ui.available_height() - 60.0)
-                .max_width(ui.ctx().content_rect().width() - 15.0)
+            let area = if self.narrow_viewport && self.small_viewport {
+                ScrollArea::both()
+            } else if self.narrow_viewport {
+                ScrollArea::horizontal()
+            } else {
+                ScrollArea::vertical()
+            };
+            area.max_height(ui.ctx().content_rect().height() - 90.0)
+                .max_width(ui.ctx().content_rect().width() - 16.0)
                 .show(ui, |ui| self.add_main_options(ui));
         } else {
             self.add_main_options(ui);
         }
         #[cfg(not(target_arch = "wasm32"))]
-        self.add_main_options(ui, frame);
+        self.add_main_options(ui, _frame);
 
         ui.add_space(10.0);
         ui.vertical_centered(|ui| {
@@ -1098,7 +1094,7 @@ impl App {
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         ctx.set_zoom_factor(1.5);
         ctx.options_mut(|opt| opt.fallback_theme = Theme::Light);
         ctx.style_mut(|style| {
@@ -1115,32 +1111,44 @@ impl eframe::App for App {
                 }
             }
         }
-        // This takes care of drawing the background, an Area doesn't have one unfortunately
         let main_area_id = "main".into();
+        let mut _pixels_per_point = ctx.pixels_per_point();
         #[cfg(target_arch = "wasm32")]
         {
+            if frame.info().web_info.location.hash == "#rfp" {
+                _pixels_per_point /= 2.0;
+            }
             use wasm_bindgen::JsCast as _;
             use web_sys::HtmlElement;
 
             let window = web_sys::window().expect("Window not available");
-            let width = window
+            let element = window
                 .document()
                 .expect("Document not available")
                 .document_element()
                 .map(|e| e.dyn_into::<HtmlElement>().ok())
                 .flatten()
-                .expect("Root node not available")
-                .client_width() as f32;
-            self.narrow_viewport = ctx
-                .memory(|m| m.area_rect(main_area_id))
-                .map(|r| width < r.width() * 1.5)
-                .unwrap_or_default()
+                .expect("Root node not available");
+            let width = element.client_width() as f32;
+            let height = element.client_height() as f32;
+            let rect = ctx.memory(|m| m.area_rect(main_area_id));
+            let prev_narrow = self.narrow_viewport;
+            let prev_small = self.small_viewport;
+            self.narrow_viewport = rect
+                .map(|r| width <= r.width() * _pixels_per_point)
+                .unwrap_or_default();
+            self.small_viewport = rect
+                .map(|r| height <= r.height() * _pixels_per_point)
+                .unwrap_or_default();
+            if self.narrow_viewport != prev_narrow || self.small_viewport != prev_small {
+                self.request_main_content_sizing_pass = true;
+            }
         };
         let sizing_pass = self.request_main_content_sizing_pass;
         self.request_main_content_sizing_pass = false;
         let content_response = egui::Area::new(main_area_id)
             .sizing_pass(sizing_pass)
-            .default_width(630.0 * 1.5)
+            .default_width(630.0 * _pixels_per_point)
             .movable(false)
             .order(egui::Order::Background)
             .show(ctx, |ui| {
@@ -1149,19 +1157,14 @@ impl eframe::App for App {
                 Frame::central_panel(ui.style())
                     .show(ui, |ui| {
                         ui.add_enabled_ui(!self.file_picker_open, |ui| {
-                            ui.vertical_centered(|ui| {
-                                ui.heading(t!("gui.ui.title"));
-                            });
+                            ui.vertical_centered(|ui| ui.heading(t!("gui.ui.title")));
                             ui.add_space(15.0);
                             if self.installation_task.is_some() {
                                 self.add_output(ui);
                                 return;
                             }
 
-                            #[cfg(target_arch = "wasm32")]
-                            self.add_main_contents(ui);
-                            #[cfg(not(target_arch = "wasm32"))]
-                            self.add_main_contents(ui, _frame)
+                            self.add_main_contents(ui, frame)
                         });
                     })
                     .response
@@ -1174,24 +1177,28 @@ impl eframe::App for App {
             + (ctx.viewport_rect().height() - ctx.content_rect().height());
         #[cfg(target_arch = "wasm32")]
         {
-            let mut used_w = used_width * 1.5;
-            let mut used_h = used_height * 1.5;
+            let mut used_w = (used_width * _pixels_per_point) as i32;
+            let mut used_h = (used_height * _pixels_per_point) as i32;
             let mut max = 100;
-            let loc = &_frame.info().web_info.location;
-            if loc.hash == "#rfp" {
-                used_w *= 2.0;
-                used_h *= 2.0;
+            if frame.info().web_info.location.hash == "#rfp" {
+                used_w *= 2;
+                used_h *= 2;
                 max *= 2;
             }
 
-            let _ = self
-                .app_canvas
-                .style()
-                .set_property("width", &format!("calc(min({max}%, {used_w}px))"));
-            let _ = self
-                .app_canvas
-                .style()
-                .set_property("height", &format!("calc(min({max}%, {used_h}px))"));
+            let w = if self.narrow_viewport {
+                format!("{max}%")
+            } else {
+                format!("calc(min({max}%, {used_w}px))")
+            };
+            let h = if self.small_viewport {
+                format!("{max}%")
+            } else {
+                format!("calc(min({max}%, {used_h}px))")
+            };
+            let style = self.app_canvas.style();
+            let _ = style.set_property("width", &w);
+            let _ = style.set_property("height", &h);
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -1200,7 +1207,7 @@ impl eframe::App for App {
             ));
         }
         egui::Area::new("language_selector".into())
-            .anchor(Align2::RIGHT_TOP, [-5.0, 30.0])
+            .anchor(Align2::RIGHT_TOP, [-5.0, 27.0])
             .order(egui::Order::Middle)
             .show(ctx, |ui| {
                 ui.add_enabled_ui(!self.file_picker_open, |ui| {
