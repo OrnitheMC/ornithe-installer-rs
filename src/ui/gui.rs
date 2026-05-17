@@ -697,15 +697,20 @@ impl App {
             #[cfg(target_arch = "wasm32")]
             let sender2 = sender.clone();
             let loader_type = self.selected_loader_type.clone();
-            let intermediary_version =
-                match self.get_intermediary_version(&selected_version, GameSide::Server) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        self.modals
-                            .push(ModalPopup::ok(t!("gui.error.installation_failed"), e.0));
-                        return;
-                    }
-                };
+            let intermediary_version = match self.get_intermediary_version(
+                &selected_version,
+                match self.mode {
+                    Mode::Server => GameSide::Server,
+                    _ => GameSide::Client,
+                },
+            ) {
+                Ok(v) => v,
+                Err(e) => {
+                    self.modals
+                        .push(ModalPopup::ok(t!("gui.error.installation_failed"), e.0));
+                    return;
+                }
+            };
             if !include_flap {
                 let _ = sender.send((0.0, t!("gui.message.excluding_flap").into()));
             }
@@ -903,7 +908,7 @@ impl App {
         }
         .cloned()
         .ok_or(InstallerError::from(t!(
-            "error.no_matching_intermediary_version",
+            "gui.error.no_matching_intermediary_version",
             version = selected_version.id
         )))
     }
@@ -1171,40 +1176,42 @@ impl eframe::App for App {
             })
             .response
             .rect;
-        let used_width =
-            content_response.width() + (ctx.viewport_rect().width() - ctx.content_rect().width());
-        let used_height = content_response.height()
-            + (ctx.viewport_rect().height() - ctx.content_rect().height());
-        #[cfg(target_arch = "wasm32")]
-        {
-            let mut used_w = (used_width * _pixels_per_point) as i32;
-            let mut used_h = (used_height * _pixels_per_point) as i32;
-            let mut max = 100;
-            if frame.info().web_info.location.hash == "#rfp" {
-                used_w *= 2;
-                used_h *= 2;
-                max *= 2;
-            }
+        if self.installation_task.is_none() {
+            let used_width = content_response.width()
+                + (ctx.viewport_rect().width() - ctx.content_rect().width());
+            let used_height = content_response.height()
+                + (ctx.viewport_rect().height() - ctx.content_rect().height());
+            #[cfg(target_arch = "wasm32")]
+            {
+                let mut used_w = (used_width * _pixels_per_point) as i32;
+                let mut used_h = (used_height * _pixels_per_point) as i32;
+                let mut max = 100;
+                if frame.info().web_info.location.hash == "#rfp" {
+                    used_w *= 2;
+                    used_h *= 2;
+                    max *= 2;
+                }
 
-            let w = if self.narrow_viewport {
-                format!("{max}%")
-            } else {
-                format!("calc(min({max}%, {used_w}px))")
-            };
-            let h = if self.small_viewport {
-                format!("{max}%")
-            } else {
-                format!("calc(min({max}%, {used_h}px))")
-            };
-            let style = self.app_canvas.style();
-            let _ = style.set_property("width", &w);
-            let _ = style.set_property("height", &h);
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-                [used_width, used_height].into(),
-            ));
+                let w = if self.narrow_viewport {
+                    format!("{max}%")
+                } else {
+                    format!("calc(min({max}%, {used_w}px))")
+                };
+                let h = if self.small_viewport {
+                    format!("{max}%")
+                } else {
+                    format!("calc(min({max}%, {used_h}px))")
+                };
+                let style = self.app_canvas.style();
+                let _ = style.set_property("width", &w);
+                let _ = style.set_property("height", &h);
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                    [used_width, used_height].into(),
+                ));
+            }
         }
         egui::Area::new("language_selector".into())
             .anchor(Align2::RIGHT_TOP, [-5.0, 27.0])
