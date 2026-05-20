@@ -1469,63 +1469,65 @@ impl<F: FnMut(&mut Ui, &str) -> Response, V: AsRef<str>, I: Iterator<Item = V>> 
         }
         let mut edit_output = edit.show(ui);
         let mut r = edit_output.response;
-        if r.gained_focus() {
-            if select_on_focus {
-                edit_output
-                    .state
-                    .cursor
-                    .set_char_range(Some(CCursorRange::two(
-                        CCursor::new(0),
-                        CCursor::new(buf.len()),
-                    )));
-                edit_output.state.store(ui.ctx(), r.id);
-            }
-            *open = true;
+        if r.changed() {
+            *open = !edit_output.galley.text().is_empty();
+        } else if r.clicked() {
+            *open = !*open;
+        }
+        if r.gained_focus() && select_on_focus {
+            edit_output
+                .state
+                .cursor
+                .set_char_range(Some(CCursorRange::two(
+                    CCursor::new(0),
+                    CCursor::new(buf.len()),
+                )));
+            edit_output.state.store(ui.ctx(), r.id);
         }
 
         let mut changed = false;
         let frame = Frame::popup(ui.style());
         let padding = frame.inner_margin.rightf();
-        if let Some(popup_response) = egui::Popup::new(
-            popup_id,
-            ui.ctx().clone(),
-            r.rect.left_bottom(),
-            ui.layer_id(),
-        )
-        .frame(frame)
-        .open(*open)
-        .show(|ui| {
-            if let Some(max) = max_height {
-                ui.set_max_height(max);
-            }
-            ScrollArea::vertical()
-                .max_height(f32::INFINITY)
-                .show(ui, |ui| {
-                    if let Some(width) = desired_width {
-                        ui.set_width(width - padding);
-                    }
-                    for var in it {
-                        let text = var.as_ref();
-                        if filter_by_input
-                            && !buf.is_empty()
-                            && !text.to_lowercase().contains(&buf.to_lowercase())
-                        {
-                            continue;
+        if let Some(popup_response) = egui::Popup::menu(&r)
+            .id(popup_id)
+            .frame(frame)
+            .style(egui::style::StyleModifier::default())
+            .open(*open)
+            .show(|ui| {
+                if let Some(max) = max_height {
+                    ui.set_max_height(max);
+                }
+                ScrollArea::vertical()
+                    .max_height(f32::INFINITY)
+                    .show(ui, |ui| {
+                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                        if let Some(width) = desired_width {
+                            ui.set_width(width - padding);
                         }
-                        let ele_response = display(ui, text);
+                        for var in it {
+                            let text = var.as_ref();
+                            if filter_by_input
+                                && !buf.is_empty()
+                                && !text.to_lowercase().contains(&buf.to_lowercase())
+                            {
+                                continue;
+                            }
+                            let ele_response = display(ui, text);
 
-                        if ele_response.clicked() {
-                            *buf = text.to_owned();
-                            changed = true;
+                            if ele_response.clicked() {
+                                *buf = text.to_owned();
+                                changed = true;
 
-                            *open = false;
+                                *open = false;
+                            }
+                            if ele_response.gained_focus() && !ui.is_rect_visible(ele_response.rect)
+                            {
+                                ele_response.scroll_to_me(Some(Align::BOTTOM));
+                            }
                         }
-                        if ele_response.gained_focus() && !ui.is_rect_visible(ele_response.rect) {
-                            ele_response.scroll_to_me(Some(Align::BOTTOM));
-                        }
-                    }
-                });
-        }) {
+                    });
+            })
+        {
             if r.lost_focus() && !popup_response.response.has_focus() {
                 *open = false;
             }
