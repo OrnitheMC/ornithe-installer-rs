@@ -216,32 +216,32 @@ struct ModalPopup {
 
 impl ModalPopup {
     pub fn yesno(
-        title: String,
-        message: String,
+        title: impl Into<String>,
+        message: impl Into<String>,
         after: Box<dyn FnOnce(MessageDialogResult) + Send + 'static>,
     ) -> Self {
         Self {
-            title,
-            message,
+            title: title.into(),
+            message: message.into(),
             buttons: MessageButtons::YesNo,
             after,
         }
     }
 
     pub fn ok_ext(
-        title: String,
-        message: String,
+        title: impl Into<String>,
+        message: impl Into<String>,
         after: Box<dyn FnOnce(MessageDialogResult) + Send + 'static>,
     ) -> Self {
         Self {
-            title,
-            message,
+            title: title.into(),
+            message: message.into(),
             buttons: MessageButtons::Ok,
             after,
         }
     }
 
-    pub fn ok<A: Into<String>, B: Into<String>>(title: A, message: B) -> ModalPopup {
+    pub fn ok(title: impl Into<String>, message: impl Into<String>) -> ModalPopup {
         ModalPopup::ok_ext(title.into(), message.into(), Box::new(|_| {}))
     }
 }
@@ -349,17 +349,29 @@ impl App {
         let loader_future = net::meta::fetch_loader_versions(&None);
 
         info!("Loading versions...");
-        if let Ok(versions) = manifest_future.await {
-            for ele in versions.versions {
-                available_minecraft_versions.push(ele);
+        match manifest_future.await {
+            Ok(versions) => {
+                for ele in versions.versions {
+                    available_minecraft_versions.push(ele);
+                }
             }
+            _ => display_dialog(
+                t!("gui.error.loading"),
+                t!("gui.error.loading.minecraft_versions"),
+            ),
         }
 
-        if let Ok(versions) = intermediary_future.await {
-            for v in versions {
-                available_intermediary_versions.push(v.0.clone());
-                intermediary_versions.insert(v.0, v.1);
+        match intermediary_future.await {
+            Ok(versions) => {
+                for v in versions {
+                    available_intermediary_versions.push(v.0.clone());
+                    intermediary_versions.insert(v.0, v.1);
+                }
             }
+            _ => display_dialog(
+                t!("gui.error.loading"),
+                t!("gui.error.loading.intermediary_versions"),
+            ),
         }
         if available_minecraft_versions.is_empty() {
             return Err(InstallerError::from(t!(
@@ -375,8 +387,14 @@ impl App {
             available_intermediary_versions.len()
         );
 
-        if let Ok(versions) = loader_future.await {
-            available_loader_versions = versions;
+        match loader_future.await {
+            Ok(versions) => {
+                available_loader_versions = versions;
+            }
+            _ => display_dialog(
+                t!("gui.error.loading"),
+                t!("gui.error.loading.loader_versions"),
+            ),
         }
         info!(
             "Loaded versions for {} loaders",
@@ -743,7 +761,7 @@ impl App {
                                 .send((1.1, String::new()))
                                 .expect("failed to finish");
                             sender2.closed().await;
-                            App::post_installation(res, dialog_sender);
+                            App::post_installation(res, dialog_sender, Mode::Client);
                         });
                     }
                     #[cfg(not(target_arch = "wasm32"))]
@@ -776,7 +794,7 @@ impl App {
                                 .send((1.1, String::new()))
                                 .expect("failed to finish");
                             sender2.closed().await;
-                            App::post_installation(res, dialog_sender);
+                            App::post_installation(res, dialog_sender, Mode::Server);
                         })
                     }
                     #[cfg(not(target_arch = "wasm32"))]
@@ -811,7 +829,7 @@ impl App {
                                 .send((1.1, String::new()))
                                 .expect("failed to finish");
                             sender2.closed().await;
-                            App::post_installation(res, dialog_sender);
+                            App::post_installation(res, dialog_sender, Mode::PrismLauncher);
                         })
                     }
                     #[cfg(not(target_arch = "wasm32"))]
@@ -843,8 +861,9 @@ impl App {
             {
                 let (_, handle) = prog.task.take().unwrap();
                 let dialog_sender = self.modal_channel.0.clone();
+                let mode = self.mode;
                 tokio::spawn(async move {
-                    App::post_installation(handle.await.unwrap(), dialog_sender);
+                    App::post_installation(handle.await.unwrap(), dialog_sender, mode);
                 });
             }
         }
@@ -1008,7 +1027,11 @@ impl App {
         });
     }
 
-    fn post_installation(result: Result<(), InstallerError>, dialog_sender: Sender<ModalPopup>) {
+    fn post_installation(
+        result: Result<(), InstallerError>,
+        dialog_sender: Sender<ModalPopup>,
+        mode: Mode,
+    ) {
         match result {
             Err(e) => {
                 error!("{}", e.0);
@@ -1020,8 +1043,11 @@ impl App {
             Ok(_) => {
                 let s = dialog_sender.clone();
                 let _ = dialog_sender.send(ModalPopup::yesno(
-                    t!("gui.dialog.installation_successful").to_string(),
-                    t!("gui.dialog.installation_successful.message").to_string(),
+                    t!("gui.dialog.installation_successful"),
+                    match mode {
+                        Mode::Server => t!("gui.dialog.installation_successful.server.message"),
+                        _ => t!("gui.dialog.installation_successful.message"),
+                    },
                     Box::new(move |res| {
                         if (res == MessageDialogResult::Yes || res == MessageDialogResult::Ok)
                             && webbrowser::open(crate::OSL_MODRINTH_URL).is_err()

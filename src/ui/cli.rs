@@ -329,31 +329,30 @@ async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn add_status_note(note: &str) {
+    log::info!("{}", note);
+    let window = web_sys::window().expect("Window not available");
+    let document = window.document().expect("Document not available");
+    let status_notes = document.get_element_by_id("status_notes").unwrap();
+    let _ = status_notes.insert_adjacent_html("beforeend", &format!("{}<br>", note));
+}
+
+#[cfg(target_arch = "wasm32")]
+fn print_note_server_extraction() {
+    add_status_note("Make sure to fully extract the zip bundle before starting your server!");
+}
+
 fn print_note_intermediary_generation(generation: u32) {
     #[cfg(target_arch = "wasm32")]
-    {
-        log::info!("Using Intermediary Generation: {generation}");
-        let window = web_sys::window().expect("Window not available");
-        let document = window.document().expect("Document not available");
-        let status_notes = document.get_element_by_id("status_notes").unwrap();
-        let _ = status_notes.insert_adjacent_html(
-            "beforeend",
-            &format!("Using Intermediary Generation: {generation}<br>"),
-        );
-    }
+    add_status_note(&format!("Using Intermediary Generation: {generation}"));
     #[cfg(not(target_arch = "wasm32"))]
     println!("Using Intermediary Generation: {generation}");
 }
 
 fn print_note_excluding_flap(_sender: &UnboundedSender<(f32, String)>) {
     #[cfg(target_arch = "wasm32")]
-    {
-        log::info!("Not installing Flap.");
-        let window = web_sys::window().expect("Window not available");
-        let document = window.document().expect("Document not available");
-        let status_notes = document.get_element_by_id("status_notes").unwrap();
-        let _ = status_notes.insert_adjacent_html("beforeend", "Not installing Flap.<br>");
-    }
+    add_status_note("Not installing Flap.");
     #[cfg(not(target_arch = "wasm32"))]
     let _ = _sender.send((0.0, "Not installing Flap.".to_owned()));
 }
@@ -396,6 +395,8 @@ async fn do_install(
     }
 
     if let Some(matches) = matches.subcommand_matches("server") {
+        #[cfg(target_arch = "wasm32")]
+        print_note_server_extraction();
         let (minecraft_version, intermediary, info) =
             get_minecraft_version(matches, GameSide::Server).await?;
 
