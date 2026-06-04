@@ -7,9 +7,9 @@ use std::{
 };
 
 use egui::{
-    Align, Align2, Button, Checkbox, Color32, ComboBox, FontId, Frame, Id, Layout, Margin, Modal,
-    ProgressBar, Response, RichText, ScrollArea, Sense, TextEdit, Theme, Tooltip, Ui, UiBuilder,
-    Vec2, Vec2b, Widget, WidgetText,
+    Align, Align2, Button, Checkbox, Color32, ComboBox, FontId, Frame, Id, Margin, Modal,
+    ProgressBar, Response, RichText, ScrollArea, Sense, TextEdit, Theme, Tooltip, Ui, Vec2, Vec2b,
+    Widget, WidgetInfo, WidgetText,
     text::{CCursor, CCursorRange},
 };
 use log::{error, info};
@@ -459,7 +459,7 @@ impl App {
 
     #[cfg(not(target_arch = "wasm32"))]
     fn add_location_picker(&mut self, frame: &mut eframe::Frame, ui: &mut egui::Ui) {
-        ui.label(if self.mode == Mode::PrismLauncher && self.generate_zip {
+        let location_label = ui.label(if self.mode == Mode::PrismLauncher && self.generate_zip {
             if *rust_i18n::locale() == *"fr" && self.detonation_easter_egg {
                 std::borrow::Cow::Borrowed("Emplacement de detonation")
             } else {
@@ -469,11 +469,13 @@ impl App {
             t!("gui.ui.install_location")
         });
         ui.horizontal(|ui| {
-            let res = ui.text_edit_singleline(match self.mode {
-                Mode::Client => &mut self.client_install_location,
-                Mode::Server => &mut self.server_install_location,
-                Mode::PrismLauncher => &mut self.mmc_output_location,
-            });
+            let res = ui
+                .text_edit_singleline(match self.mode {
+                    Mode::Client => &mut self.client_install_location,
+                    Mode::Server => &mut self.server_install_location,
+                    Mode::PrismLauncher => &mut self.mmc_output_location,
+                })
+                .labelled_by(location_label.id);
             if !res.hovered() && !res.has_focus() {
                 ui.painter().rect_stroke(
                     res.rect.expand(ui.visuals().widgets.hovered.expansion),
@@ -514,7 +516,7 @@ impl App {
     }
 
     fn add_environment_options(&mut self, ui: &mut egui::Ui) {
-        ui.label(t!("gui.ui.environment"));
+        let environment_label = ui.label(t!("gui.ui.environment"));
         ui.horizontal(|ui| {
             ui.spacing_mut().icon_width -= 4.0;
             let mut clicked = false;
@@ -522,14 +524,17 @@ impl App {
 
             clicked |= ui
                 .radio_value(&mut self.mode, Mode::Client, t!("gui.mode.client"))
+                .labelled_by(environment_label.id)
                 .clicked();
 
             clicked |= ui
                 .radio_value(&mut self.mode, Mode::PrismLauncher, t!("gui.mode.prism"))
+                .labelled_by(environment_label.id)
                 .clicked();
 
             clicked |= ui
                 .radio_value(&mut self.mode, Mode::Server, t!("gui.mode.server"))
+                .labelled_by(environment_label.id)
                 .clicked();
 
             if clicked && prev_mode != self.mode {
@@ -539,7 +544,7 @@ impl App {
     }
 
     fn add_minecraft_version(&mut self, ui: &mut egui::Ui) {
-        ui.label(t!("gui.ui.minecraft_version"));
+        let minecraft_version_label = ui.label(t!("gui.ui.minecraft_version"));
         ui.horizontal(|ui| {
             let res = DropDownBox::from_iter(
                 &self.filtered_minecraft_versions,
@@ -555,7 +560,8 @@ impl App {
             .max_height(130.0)
             .desired_width((ui.available_width() / 2.0).min(170.0))
             .hint_text(RichText::from(t!("gui.ui.search_available_versions")))
-            .ui(ui);
+            .ui(ui)
+            .labelled_by(minecraft_version_label.id);
 
             if !res.hovered() && !res.has_focus() {
                 ui.painter().rect_stroke(
@@ -618,7 +624,7 @@ impl App {
     }
 
     fn add_loader(&mut self, ui: &mut egui::Ui) {
-        ui.label(t!("gui.ui.loader"));
+        let loader_label = ui.label(t!("gui.ui.loader"));
         ui.horizontal(|ui| {
             let loader_type_response = ComboBox::from_id_salt("loader_type")
                 .height(130.0)
@@ -650,7 +656,8 @@ impl App {
                         .changed();
                     changed
                 });
-            ui.label(t!("gui.ui.loader_version"));
+            loader_type_response.response.labelled_by(loader_label.id);
+            let loader_version_label = ui.label(t!("gui.ui.loader_version"));
             ComboBox::from_id_salt("loader_version")
                 .height(130.0)
                 .selected_text(self.selected_loader_version.to_string())
@@ -668,7 +675,9 @@ impl App {
                             );
                         }
                     }
-                });
+                })
+                .response
+                .labelled_by(loader_version_label.id);
             let checkbox_response =
                 ui.checkbox(&mut self.show_betas, t!("gui.ui.show_loader_betas"));
             if self
@@ -874,6 +883,19 @@ impl App {
             let flap_checkbox =
                 Checkbox::new(&mut self.include_flap, t!("gui.checkbox.include_flap"));
             let flap_box_response = ui.add(flap_checkbox);
+            flap_box_response.widget_info(|| {
+                let info = WidgetInfo::selected(
+                    egui::WidgetType::Checkbox,
+                    true,
+                    self.include_flap,
+                    format!(
+                        "{}: {}",
+                        t!("gui.checkbox.include_flap"),
+                        &(t!("gui.flap.description"))
+                    ),
+                );
+                info
+            });
             if flap_box_response.has_focus() || flap_box_response.hovered() {
                 Tooltip::for_widget(&flap_box_response)
                     .show(|ui| ui.label(t!("gui.flap.description")));
@@ -1002,9 +1024,8 @@ impl App {
 
     fn add_language_selector(&mut self, ui: &mut egui::Ui) {
         let current = &*rust_i18n::locale();
-        let mut child =
-            ui.new_child(UiBuilder::new().layout(Layout::right_to_left(egui::Align::TOP)));
-        child.horizontal(|ui| {
+        ui.horizontal(|ui| {
+            ui.label(t!("gui.ui.language"));
             ComboBox::from_id_salt("language")
                 .height(130.0)
                 .width(20.0)
@@ -1023,7 +1044,6 @@ impl App {
                         }
                     }
                 });
-            ui.label(t!("gui.ui.language"));
         });
     }
 
@@ -1127,7 +1147,9 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         ctx.set_zoom_factor(1.5);
-        ctx.options_mut(|opt| opt.fallback_theme = Theme::Light);
+        ctx.options_mut(|opt| {
+            opt.fallback_theme = Theme::Light;
+        });
         ctx.style_mut(|style| {
             style.interaction.selectable_labels = false;
         });
@@ -1184,7 +1206,6 @@ impl eframe::App for App {
             .order(egui::Order::Background)
             .show(ctx, |ui| {
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-                ui.style_mut().interaction.selectable_labels = false;
                 Frame::central_panel(ui.style())
                     .show(ui, |ui| {
                         ui.add_enabled_ui(!self.file_picker_open, |ui| {
