@@ -66,9 +66,10 @@ pub async fn run() {
                         .default_value(super::server_location())
                         .value_parser(value_parser!(PathBuf)),
                 )
-                .arg(arg!(--"download-minecraft" "Whether to download the minecraft server jar")
+                .arg(arg!(--"download-minecraft" <VALUE> "Whether to download the minecraft server jar")
                     .visible_alias("download-server")
                     .visible_alias("download")
+                    .default_value("true").value_parser(value_parser!(bool))
                 )
                 .subcommand(Command::new("run").about("Install and run the server")
                     .arg(arg!(--args <ARGS> "Java arguments to pass to the server (before the server jar)"))
@@ -439,7 +440,7 @@ async fn do_install(
             loader_version,
             info.calamus_generation,
             location,
-            matches.get_flag("download-minecraft"),
+            *matches.get_one::<bool>("download-minecraft").unwrap(),
             !exclude_flap,
         )
         .await?;
