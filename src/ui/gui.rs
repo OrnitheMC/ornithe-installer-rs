@@ -70,7 +70,6 @@ async fn create_window() -> Result<(), InstallerError> {
                 .with_inner_size([630.0, 470.0])
                 .with_resizable(false)
                 .with_icon(data),
-            renderer: eframe::Renderer::Wgpu,
             ..Default::default()
         };
 
@@ -1279,7 +1278,7 @@ impl eframe::App for App {
             let modal_id = Id::new(modal.title.clone() + &modal.message);
             let remove = Modal::new(modal_id).show(ctx, |ui| {
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-                ui.scope(|ui| {
+                let response = ui.scope(|ui| {
                     ui.vertical_centered(|ui| ui.heading(&modal.title));
                     ui.add_space(15.0);
                     ui.label(&modal.message);
@@ -1417,10 +1416,17 @@ impl eframe::App for App {
                         }
                     })
                     .inner
-                })
-                .inner
+                });
+                response.response.widget_info(|| {
+                    WidgetInfo::labeled(
+                        egui::WidgetType::Window,
+                        true,
+                        format!("Modal {}: {}", modal.title, modal.message),
+                    )
+                });
+                response
             });
-            if let Some(result) = remove.inner {
+            if let Some(result) = remove.inner.inner {
                 let m = self.modals.remove(i);
                 (m.after)(result);
             }
