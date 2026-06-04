@@ -31,14 +31,14 @@ publishing {
 
             artifact {
                 file(
-                    "$projectDir/target/$target/release/ornithe-installer-rs." + if (os?.contains("windows") == true) // thanks kotlin
-                        "exe" else ""
+                    "$projectDir/target/$target/release/ornithe-installer-rs" + if (os?.contains("windows") == true) // thanks kotlin
+                        ".exe" else ".bin"
                 )
             }
             artifact (
                 file(
-                    "$projectDir/target/$target/release/ornithe-installer-rs-cli." + if (os?.contains("windows") == true) // thanks kotlin
-                        "exe" else ""
+                    "$projectDir/target/$target/release/ornithe-installer-rs-cli" + if (os?.contains("windows") == true) // thanks kotlin
+                        ".exe" else ".bin"
                 )
             ) {
                 classifier = "cli"
