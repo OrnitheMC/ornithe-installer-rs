@@ -338,10 +338,17 @@ struct FilePickResult {
 }
 
 impl App {
+    pub fn abort<T: Into<String> + Display + Clone, M: Into<String> + Display>(
+        title: T,
+        message: M,
+    ) -> Result<App, InstallerError> {
+        display_dialog(title.clone(), message);
+        return Err(InstallerError(title.into()));
+    }
     async fn create() -> Result<App, InstallerError> {
         let mut available_minecraft_versions = Vec::new();
         let mut available_intermediary_versions = Vec::new();
-        let mut available_loader_versions = HashMap::new();
+        let available_loader_versions;
         let mut intermediary_versions = HashMap::new();
         let manifest_future = net::manifest::fetch_versions(&None);
         let intermediary_future = net::meta::fetch_intermediary_versions(&None);
@@ -354,10 +361,12 @@ impl App {
                     available_minecraft_versions.push(ele);
                 }
             }
-            _ => display_dialog(
-                t!("gui.error.loading"),
-                t!("gui.error.loading.minecraft_versions"),
-            ),
+            _ => {
+                return Self::abort(
+                    t!("gui.error.loading"),
+                    t!("gui.error.loading.minecraft_versions"),
+                );
+            }
         }
 
         match intermediary_future.await {
@@ -367,10 +376,12 @@ impl App {
                     intermediary_versions.insert(v.0, v.1);
                 }
             }
-            _ => display_dialog(
-                t!("gui.error.loading"),
-                t!("gui.error.loading.intermediary_versions"),
-            ),
+            _ => {
+                return Self::abort(
+                    t!("gui.error.loading"),
+                    t!("gui.error.loading.intermediary_versions"),
+                );
+            }
         }
         if available_minecraft_versions.is_empty() {
             return Err(InstallerError::from(t!(
@@ -390,10 +401,12 @@ impl App {
             Ok(versions) => {
                 available_loader_versions = versions;
             }
-            _ => display_dialog(
-                t!("gui.error.loading"),
-                t!("gui.error.loading.loader_versions"),
-            ),
+            _ => {
+                return Self::abort(
+                    t!("gui.error.loading"),
+                    t!("gui.error.loading.loader_versions"),
+                );
+            }
         }
         info!(
             "Loaded versions for {} loaders",
@@ -1033,11 +1046,11 @@ impl App {
                     for ele in rust_i18n::available_locales!() {
                         let mut name = t!("language_name", locale = ele);
                         if name == t!("language_name", locale = "en") && ele != "en" {
-                            name = std::borrow::Cow::Borrowed(ele);
+                            name = ele.clone();
                         }
                         if ui.selectable_label(ele == current, name).clicked() {
                             if ele != current {
-                                rust_i18n::set_locale(ele);
+                                rust_i18n::set_locale(&ele);
                                 self.request_main_content_sizing_pass = true;
                             }
                         }
@@ -1167,9 +1180,6 @@ impl eframe::App for App {
         let mut _pixels_per_point = ctx.pixels_per_point();
         #[cfg(target_arch = "wasm32")]
         {
-            if frame.info().web_info.location.hash == "#rfp" {
-                _pixels_per_point /= 2.0;
-            }
             use wasm_bindgen::JsCast as _;
             use web_sys::HtmlElement;
 
@@ -1181,6 +1191,9 @@ impl eframe::App for App {
                 .map(|e| e.dyn_into::<HtmlElement>().ok())
                 .flatten()
                 .expect("Root node not available");
+            if frame.info().web_info.location.hash == "#rfp" {
+                _pixels_per_point /= 2.0;
+            }
             let width = element.client_width() as f32;
             let height = element.client_height() as f32;
             let rect = ctx.memory(|m| m.area_rect(main_area_id));
