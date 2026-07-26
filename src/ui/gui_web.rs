@@ -9,9 +9,10 @@ use std::{
 use log::info;
 use rfd::{AsyncMessageDialog, MessageButtons, MessageDialogResult};
 use tokio::sync::mpsc::unbounded_channel;
-use wasm_bindgen::{JsCast, prelude::Closure};
+use wasm_bindgen::{JsCast, JsValue, prelude::Closure};
 use web_sys::{
-    Document, Event, HtmlElement, HtmlInputElement, HtmlProgressElement, HtmlSelectElement, window,
+    Document, Event, HtmlElement, HtmlInputElement, HtmlProgressElement, HtmlSelectElement, js_sys,
+    window,
 };
 
 use crate::{
@@ -22,6 +23,8 @@ use crate::{
         meta::{IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
+
+const LANGUAGE_COOKIE_NAME: &str = "ornithe-installer-rs_lang";
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 enum Mode {
@@ -232,9 +235,38 @@ pub async fn run() {
 }
 
 async fn run0() -> Result<(), InstallerError> {
+    let search = web_sys::window()
+        .expect("Window not available")
+        .location()
+        .search()
+        .unwrap_or(String::new());
+    let queries = search[1..].split("&").collect::<Vec<&str>>();
+    let mut used_lang_from_query = false;
+    for params in queries {
+        let mut s = params.split("=");
+        if let Some(name) = s.next()
+            && name == "lang"
+            && let Some(value) = s.next()
+        {
+            used_lang_from_query = true;
+            rust_i18n::set_locale(value);
+        }
+    }
+    if !used_lang_from_query
+        && let Some(previous_locale) = window()
+            .unwrap()
+            .cookie_store()
+            .get_with_name(LANGUAGE_COOKIE_NAME)
+            .await
+            .and_then(|o| js_sys::Reflect::get(&o, &JsValue::from_str("value")))
+            .ok()
+            .and_then(|v| v.as_string())
+    {
+        rust_i18n::set_locale(&previous_locale);
+    }
+
     let mut state = Rc::new(State::create().await?);
     initialize(&mut state)?;
-    setup_callbacks(&mut state);
     Ok(())
 }
 
@@ -243,17 +275,20 @@ fn initialize(mut state: &mut Rc<State>) -> Result<(), InstallerError> {
     update_minecraft_versions(&mut state);
     update_loader_versions(&mut state);
     update_options(&mut state);
+    setup_callbacks(&mut state);
     Ok(())
 }
 
 fn setup() -> Result<(), InstallerError> {
+    let available_locales = rust_i18n::available_locales!();
     let document = get_document();
-    let loading_text = document.get_element_by_id("loading_text").unwrap();
-    let body = loading_text
-        .parent_element()
-        .unwrap()
-        .parent_element()
+    let body = document
+        .get_element_by_id("loading_text")
+        .and_then(|e| e.parent_element())
+        .or(document.get_element_by_id("web_installer"))
+        .and_then(|e| e.parent_element())
         .unwrap();
+    let _ = body.set_attribute("style", "display: flex; justify-content: center;");
     let mut html = String::new();
     html.write_str(
         "<div id=\"web_installer\" style=\"
@@ -261,8 +296,9 @@ fn setup() -> Result<(), InstallerError> {
                 font-size: 24px;
                 font-family: Ubuntu-Light, Helvetica, sans-serif;
                 position: absolute;
-                top: 50%; left: 50%;
-                transform: translate(-50%, -55%);
+                /*top: 50%; left: 50%;
+                transform: translate(-50%, -55%);*/
+                overflow: scroll;
             \">",
     )?;
     write!(
@@ -270,10 +306,21 @@ fn setup() -> Result<(), InstallerError> {
         r#"<h1 style="text-align: center">{}</h1>"#,
         t!("gui.ui.title")
     )?;
+    write!(html, "<div id=\"inputs\">")?;
     write!(
         html,
-        r#"<select id="language_selector">{}</select>"#,
-        rust_i18n::available_locales!()
+        r#"
+        <div id="env_header" style="display: flex; align-items: center;">
+            <h3 style="flex-grow: 1;">{}</h3>
+            <div id="language_container">
+            <label for="language_selector">{}</label>
+            <select id="language_selector">{}</select>
+        </div>
+        </div>
+        "#,
+        t!("gui.ui.environment"),
+        t!("gui.ui.language"),
+        available_locales
             .iter()
             .map(|s| format!(
                 "<option id=\"{}\">{}</option>",
@@ -282,10 +329,9 @@ fn setup() -> Result<(), InstallerError> {
             ))
             .collect::<String>()
     )?;
-    write!(html, "<div id=\"inputs\">")?;
     write!(
         html,
-        r#"<h3>{}</h3>
+        r#"
             <div id="env">
                 <input type="radio" checked id="env_client">
                 <label for="env_client">{}</label>
@@ -294,7 +340,6 @@ fn setup() -> Result<(), InstallerError> {
                 <input type="radio" id="env_server">
                 <label for="env_server">{}</label>
             </div>"#,
-        t!("gui.ui.environment"),
         t!("gui.mode.client"),
         t!("gui.mode.prism"),
         t!("gui.mode.server"),
@@ -389,12 +434,16 @@ fn setup() -> Result<(), InstallerError> {
     write!(html, "</div>")?;
     let mut current_locale_index = 0;
     let current_locale = rust_i18n::locale();
-    for locale in rust_i18n::available_locales!() {
+    for locale in available_locales {
         if *current_locale == locale {
             break;
         }
         current_locale_index += 1;
     }
+    info!(
+        "Current locale: {} ({current_locale_index})",
+        current_locale.to_owned()
+    );
     body.set_inner_html(&html);
     get_document()
         .get_element_by_id("language_selector")
@@ -500,9 +549,20 @@ fn setup_callbacks(state: &mut Rc<State>) {
         state,
         "language_selector",
         Box::new(|mut s, e| {
-            let selected = e.dyn_into::<HtmlInputElement>().unwrap().value();
+            let e = e.dyn_into::<HtmlSelectElement>().unwrap();
+            let selected = rust_i18n::available_locales!()
+                .iter()
+                .skip(e.selected_index() as usize)
+                .next()
+                .map(|s| s.clone())
+                .unwrap_or(std::borrow::Cow::Borrowed("en"));
+            info!("Setting locale to {}", selected);
             rust_i18n::set_locale(&selected);
-            if let Err(e) = setup() {
+            let _ = window()
+                .unwrap()
+                .cookie_store()
+                .set_with_name_and_value(LANGUAGE_COOKIE_NAME, &selected);
+            if let Err(e) = initialize(&mut s) {
                 handle_error(false, e);
             }
         }),

@@ -39,13 +39,12 @@ async fn start_installer() {
     {
         #[cfg(target_arch = "wasm32")]
         {
-            if web_sys::window()
+            let search = web_sys::window()
                 .expect("Window not available")
                 .location()
                 .search()
-                .unwrap_or(String::new())
-                .is_empty()
-            {
+                .unwrap_or(String::new());
+            if search.is_empty() || search.contains("lang") {
                 crate::ui::gui_web::run().await;
                 return;
             }
