@@ -1,5 +1,8 @@
 [build]
 pre-build = [
     "dpkg --add-architecture $CROSS_DEB_ARCH",
-    "apt-get update && apt-get --assume-yes install libxcb-render0-dev:$CROSS_DEB_ARCH libxcb-shape0-dev:$CROSS_DEB_ARCH libxcb-xfixes0-dev:$CROSS_DEB_ARCH libxkbcommon-dev:$CROSS_DEB_ARCH libssl-dev:$CROSS_DEB_ARCH libgtk-3-dev:$CROSS_DEB_ARCH"
+    "apt-get update"
+    # https://github.com/cross-rs/cross/issues/1784
+    "apt-get -y install qemu-user-static binfmt-support",
+    "apt-get -y install libxcb-render0-dev:$CROSS_DEB_ARCH libxcb-shape0-dev:$CROSS_DEB_ARCH libxcb-xfixes0-dev:$CROSS_DEB_ARCH libxkbcommon-dev:$CROSS_DEB_ARCH libssl-dev:$CROSS_DEB_ARCH libgtk-3-dev:$CROSS_DEB_ARCH"
 ]
