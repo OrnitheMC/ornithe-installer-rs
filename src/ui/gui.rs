@@ -60,78 +60,27 @@ async fn create_window() -> Result<(), InstallerError> {
         return Ok(());
     }
     let app = res.unwrap();
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let data = eframe::icon_data::from_png_bytes(crate::ORNITHE_ICON_BYTES)
-            .expect("The Ornithe Icon is a valid PNG file");
-        let options = eframe::NativeOptions {
-            viewport: egui::ViewportBuilder::default()
-                .with_inner_size([630.0, 470.0])
-                .with_resizable(false)
-                .with_icon(data),
-            ..Default::default()
-        };
 
-        eframe::run_native(
-            &("Ornithe Installer ".to_owned() + crate::VERSION),
-            options,
-            Box::new(|cc| {
-                // load needed system fonts
-                load_system_font_to_egui(&cc.egui_ctx);
+    let data = eframe::icon_data::from_png_bytes(crate::ORNITHE_ICON_BYTES)
+        .expect("The Ornithe Icon is a valid PNG file");
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([630.0, 470.0])
+            .with_resizable(false)
+            .with_icon(data),
+        ..Default::default()
+    };
 
-                Ok(Box::new(app))
-            }),
-        )?;
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        use eframe::wasm_bindgen::JsCast as _;
+    eframe::run_native(
+        &("Ornithe Installer ".to_owned() + crate::VERSION),
+        options,
+        Box::new(|cc| {
+            // load needed system fonts
+            load_system_font_to_egui(&cc.egui_ctx);
 
-        let web_options = eframe::WebOptions::default();
-
-        let window = web_sys::window().expect("No window");
-        let document = window.document().expect("No document");
-
-        let canvas = document
-            .get_element_by_id("main_canvas")
-            .expect("Failed to find the_canvas_id")
-            .dyn_into::<web_sys::HtmlCanvasElement>()
-            .expect("main_canvas was not a HtmlCanvasElement");
-
-        if window.location().hash().unwrap_or_default() == "#rfp" {
-            let style = canvas.style();
-            let _ = style.set_property_with_priority("scale", "0.5", "important");
-            let _ = style.set_property("translate", "-25% -25%");
-        }
-
-        let start_result = eframe::WebRunner::new()
-            .start(
-                canvas.clone(),
-                web_options,
-                Box::new(|cc| {
-                    // load needed system fonts
-                    load_system_font_to_egui(&cc.egui_ctx);
-
-                    Ok(Box::new(app))
-                }),
-            )
-            .await;
-
-        // Remove the loading text and spinner:
-        if let Some(loading_text) = document.get_element_by_id("loading_text") {
-            match start_result {
-                Ok(_) => {
-                    loading_text.remove();
-                }
-                Err(e) => {
-                    loading_text.set_inner_html(
-                        "<p> The app has crashed. See the developer console for details. </p>",
-                    );
-                    panic!("Failed to start eframe: {e:?}");
-                }
-            }
-        }
-    }
+            Ok(Box::new(app))
+        }),
+    )?;
     Ok(())
 }
 
@@ -158,10 +107,7 @@ fn display_dialog_ext<F, T: Into<String> + Display, M: Into<String> + Display>(
     let fut = async move {
         after(dialog.show().await);
     };
-    #[cfg(not(target_arch = "wasm32"))]
     tokio::spawn(fut);
-    #[cfg(target_arch = "wasm32")]
-    wasm_bindgen_futures::spawn_local(fut);
 }
 
 struct App {
@@ -191,18 +137,11 @@ struct App {
     ),
     file_picker_open: bool,
     minecraft_version_dropdown_open: bool,
-    #[cfg(not(target_arch = "wasm32"))]
     detonation_easter_egg: bool,
     include_flap: bool,
     modals: Vec<ModalPopup>,
     modal_channel: (Sender<ModalPopup>, Receiver<ModalPopup>),
-    #[cfg(target_arch = "wasm32")]
-    app_canvas: web_sys::HtmlCanvasElement,
     request_main_content_sizing_pass: bool,
-    #[cfg(target_arch = "wasm32")]
-    narrow_viewport: bool,
-    #[cfg(target_arch = "wasm32")]
-    small_viewport: bool,
 }
 
 struct ModalPopup {
@@ -244,47 +183,17 @@ impl ModalPopup {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 type Task = (
     UnboundedReceiver<(f32, String)>,
     tokio::task::JoinHandle<Result<(), InstallerError>>,
 );
-#[cfg(target_arch = "wasm32")]
-type Task = UnboundedReceiver<(f32, String)>;
+
 pub struct InstallationProgress {
     last_progress: f32,
     status: Vec<String>,
     task: Option<Task>,
 }
 
-#[cfg(target_arch = "wasm32")]
-impl InstallationProgress {
-    pub fn new(task: Task) -> Self {
-        Self {
-            last_progress: 0.0,
-            status: Vec::new(),
-            task: Some(task),
-        }
-    }
-
-    pub fn rec(&mut self) -> Option<&mut UnboundedReceiver<(f32, String)>> {
-        self.task.as_mut()
-    }
-
-    pub fn is_finished(&self) -> bool {
-        self.last_progress >= 1.0 && self.task.is_some()
-    }
-
-    pub fn is_running(&self) -> bool {
-        if self.last_progress < 1.0 {
-            self.task.is_some()
-        } else {
-            false
-        }
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
 impl InstallationProgress {
     pub fn new(task: Task) -> Self {
         Self {
@@ -371,8 +280,10 @@ impl App {
         match intermediary_future.await {
             Ok(versions) => {
                 for v in versions {
-                    available_intermediary_versions.push(v.0.clone());
-                    intermediary_versions.insert(v.0, v.1);
+                    if v.1.stable {
+                        available_intermediary_versions.push(v.0.clone());
+                        intermediary_versions.insert(v.0, v.1);
+                    }
                 }
             }
             _ => {
@@ -411,18 +322,6 @@ impl App {
             "Loaded versions for {} loaders",
             available_loader_versions.len()
         );
-        #[cfg(target_arch = "wasm32")]
-        let app_canvas = {
-            use eframe::wasm_bindgen::JsCast as _;
-            let window = web_sys::window().expect("No window");
-            let document = window.document().expect("No document");
-
-            document
-                .get_element_by_id("main_canvas")
-                .expect("Failed to find the_canvas_id")
-                .dyn_into::<web_sys::HtmlCanvasElement>()
-                .expect("main_canvas was not a HtmlCanvasElement")
-        };
 
         let mut app = App {
             mode: Mode::Client,
@@ -451,24 +350,16 @@ impl App {
             file_picker_open: false,
             installation_task: None,
             minecraft_version_dropdown_open: false,
-            #[cfg(not(target_arch = "wasm32"))]
             detonation_easter_egg: rand::random_bool(0.001),
             include_flap: true,
             modals: Vec::new(),
             modal_channel: std::sync::mpsc::channel(),
-            #[cfg(target_arch = "wasm32")]
-            app_canvas,
             request_main_content_sizing_pass: true,
-            #[cfg(target_arch = "wasm32")]
-            narrow_viewport: false,
-            #[cfg(target_arch = "wasm32")]
-            small_viewport: false,
         };
         app.filter_minecraft_versions();
         Ok(app)
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     fn add_location_picker(&mut self, frame: &mut eframe::Frame, ui: &mut egui::Ui) {
         let location_label = ui.label(if self.mode == Mode::PrismLauncher && self.generate_zip {
             if *rust_i18n::locale() == *"fr" && self.detonation_easter_egg {
@@ -732,10 +623,9 @@ impl App {
                 .clone();
             let include_flap = self.include_flap;
             let (sender, receiver) = unbounded_channel();
-            #[cfg(target_arch = "wasm32")]
-            let sender2 = sender.clone();
             let loader_type = self.selected_loader_type.clone();
-            let intermediary_version = match get_intermediary_version(
+            let intermediary_version = match crate::ui::get_intermediary_version(
+                self.intermediary_versions.clone(),
                 &selected_version,
                 match self.mode {
                     Mode::Server => GameSide::Server,
@@ -771,24 +661,8 @@ impl App {
                         include_flap,
                     );
 
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        self.installation_task = Some(InstallationProgress::new(receiver));
-                        let dialog_sender = self.modal_channel.0.clone();
-                        wasm_bindgen_futures::spawn_local(async move {
-                            let res = fut.await;
-                            sender2
-                                .send((1.1, String::new()))
-                                .expect("failed to finish");
-                            sender2.closed().await;
-                            App::post_installation(res, dialog_sender, Mode::Client);
-                        });
-                    }
-                    #[cfg(not(target_arch = "wasm32"))]
-                    {
-                        self.installation_task =
-                            Some(InstallationProgress::new((receiver, tokio::spawn(fut))));
-                    }
+                    self.installation_task =
+                        Some(InstallationProgress::new((receiver, tokio::spawn(fut))));
                 }
                 Mode::Server => {
                     let location = Path::new(&self.server_install_location).to_path_buf();
@@ -804,24 +678,9 @@ impl App {
                         download_server,
                         include_flap,
                     );
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        self.installation_task = Some(InstallationProgress::new(receiver));
-                        let dialog_sender = self.modal_channel.0.clone();
-                        wasm_bindgen_futures::spawn_local(async move {
-                            let res = fut.await;
-                            sender2
-                                .send((1.1, String::new()))
-                                .expect("failed to finish");
-                            sender2.closed().await;
-                            App::post_installation(res, dialog_sender, Mode::Server);
-                        })
-                    }
-                    #[cfg(not(target_arch = "wasm32"))]
-                    {
-                        self.installation_task =
-                            Some(InstallationProgress::new((receiver, tokio::spawn(fut))));
-                    }
+
+                    self.installation_task =
+                        Some(InstallationProgress::new((receiver, tokio::spawn(fut))));
                 }
                 Mode::PrismLauncher => {
                     let location = Path::new(&self.mmc_output_location).to_path_buf();
@@ -839,24 +698,9 @@ impl App {
                         None,
                         include_flap,
                     );
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        self.installation_task = Some(InstallationProgress::new(receiver));
-                        let dialog_sender = self.modal_channel.0.clone();
-                        wasm_bindgen_futures::spawn_local(async move {
-                            let res = fut.await;
-                            sender2
-                                .send((1.1, String::new()))
-                                .expect("failed to finish");
-                            sender2.closed().await;
-                            App::post_installation(res, dialog_sender, Mode::PrismLauncher);
-                        })
-                    }
-                    #[cfg(not(target_arch = "wasm32"))]
-                    {
-                        self.installation_task =
-                            Some(InstallationProgress::new((receiver, tokio::spawn(fut))));
-                    }
+
+                    self.installation_task =
+                        Some(InstallationProgress::new((receiver, tokio::spawn(fut))));
                 }
             }
         } else {
@@ -875,17 +719,13 @@ impl App {
             while !prog.rec().map(|rec| rec.is_empty()).unwrap_or(false) {
                 prog.poll();
             }
-            #[cfg(target_arch = "wasm32")]
-            let _ = prog.task.take();
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                let (_, handle) = prog.task.take().unwrap();
-                let dialog_sender = self.modal_channel.0.clone();
-                let mode = self.mode;
-                tokio::spawn(async move {
-                    App::post_installation(handle.await.unwrap(), dialog_sender, mode);
-                });
-            }
+
+            let (_, handle) = prog.task.take().unwrap();
+            let dialog_sender = self.modal_channel.0.clone();
+            let mode = self.mode;
+            tokio::spawn(async move {
+                App::post_installation(handle.await.unwrap(), dialog_sender, mode);
+            });
         }
     }
 
@@ -913,7 +753,6 @@ impl App {
             }
             match self.mode {
                 Mode::Client => {
-                    #[cfg(not(target_arch = "wasm32"))]
                     ui.checkbox(
                         &mut self.create_profile,
                         t!("gui.checkbox.generate_profile"),
@@ -926,17 +765,14 @@ impl App {
                     );
                 }
                 Mode::PrismLauncher => {
-                    #[cfg(not(target_arch = "wasm32"))]
-                    {
-                        ui.checkbox(
-                            &mut self.copy_generated_location,
-                            t!("gui.checkbox.copy_profile_path"),
-                        );
-                        ui.checkbox(
-                            &mut self.generate_zip,
-                            t!("gui.checkbox.generate_instance_zip"),
-                        );
-                    }
+                    ui.checkbox(
+                        &mut self.copy_generated_location,
+                        t!("gui.checkbox.copy_profile_path"),
+                    );
+                    ui.checkbox(
+                        &mut self.generate_zip,
+                        t!("gui.checkbox.generate_instance_zip"),
+                    );
                 }
             }
         });
@@ -1074,11 +910,7 @@ impl App {
         }
     }
 
-    fn add_main_options(
-        &mut self,
-        ui: &mut Ui,
-        #[cfg(not(target_arch = "wasm32"))] frame: &mut eframe::Frame,
-    ) {
+    fn add_main_options(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         self.add_environment_options(ui);
 
         ui.add_space(10.0);
@@ -1086,40 +918,17 @@ impl App {
         ui.add_space(10.0);
         self.add_loader(ui);
 
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            ui.add_space(10.0);
-            self.add_location_picker(frame, ui);
-        }
+        ui.add_space(10.0);
+        self.add_location_picker(frame, ui);
 
         ui.add_space(10.0);
         self.add_additional_options(ui);
     }
     fn add_main_contents(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
-        #[cfg(target_arch = "wasm32")]
-        if self.narrow_viewport || self.small_viewport {
-            ui.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
-            let area = if self.narrow_viewport && self.small_viewport {
-                ScrollArea::both()
-            } else if self.narrow_viewport {
-                ScrollArea::horizontal()
-            } else {
-                ScrollArea::vertical()
-            };
-            area.max_height(ui.ctx().content_rect().height() - 90.0)
-                .max_width(ui.ctx().content_rect().width() - 16.0)
-                .show(ui, |ui| self.add_main_options(ui));
-        } else {
-            self.add_main_options(ui);
-        }
-        #[cfg(not(target_arch = "wasm32"))]
         self.add_main_options(ui, _frame);
 
         ui.add_space(10.0);
         ui.vertical_centered(|ui| {
-            #[cfg(target_arch = "wasm32")]
-            let install_text = t!("gui.button.install_web");
-            #[cfg(not(target_arch = "wasm32"))]
             let install_text = t!("gui.button.install");
             if Button::new(RichText::new(install_text).heading())
                 .min_size(Vec2::new(100.0, 0.0))
@@ -1152,37 +961,7 @@ impl eframe::App for App {
         }
         let main_area_id = "main".into();
         let mut _pixels_per_point = ui.pixels_per_point();
-        #[cfg(target_arch = "wasm32")]
-        {
-            use wasm_bindgen::JsCast as _;
-            use web_sys::HtmlElement;
 
-            let window = web_sys::window().expect("Window not available");
-            let element = window
-                .document()
-                .expect("Document not available")
-                .document_element()
-                .map(|e| e.dyn_into::<HtmlElement>().ok())
-                .flatten()
-                .expect("Root node not available");
-            if frame.info().web_info.location.hash == "#rfp" {
-                _pixels_per_point /= 2.0;
-            }
-            let width = element.client_width() as f32;
-            let height = element.client_height() as f32;
-            let rect = ui.memory(|m| m.area_rect(main_area_id));
-            let prev_narrow = self.narrow_viewport;
-            let prev_small = self.small_viewport;
-            self.narrow_viewport = rect
-                .map(|r| width <= r.width() * _pixels_per_point)
-                .unwrap_or_default();
-            self.small_viewport = rect
-                .map(|r| height <= r.height() * _pixels_per_point)
-                .unwrap_or_default();
-            if self.narrow_viewport != prev_narrow || self.small_viewport != prev_small {
-                self.request_main_content_sizing_pass = true;
-            }
-        };
         let sizing_pass = self.request_main_content_sizing_pass;
         self.request_main_content_sizing_pass = false;
         let content_response = egui::Area::new(main_area_id)
@@ -1214,37 +993,10 @@ impl eframe::App for App {
                 content_response.width() + (ui.viewport_rect().width() - ui.content_rect().width());
             let used_height = content_response.height()
                 + (ui.viewport_rect().height() - ui.content_rect().height());
-            #[cfg(target_arch = "wasm32")]
-            {
-                let mut used_w = (used_width * _pixels_per_point) as i32;
-                let mut used_h = (used_height * _pixels_per_point) as i32;
-                let mut max = 100;
-                if frame.info().web_info.location.hash == "#rfp" {
-                    used_w *= 2;
-                    used_h *= 2;
-                    max *= 2;
-                }
 
-                let w = if self.narrow_viewport {
-                    format!("{max}%")
-                } else {
-                    format!("calc(min({max}%, {used_w}px))")
-                };
-                let h = if self.small_viewport {
-                    format!("{max}%")
-                } else {
-                    format!("calc(min({max}%, {used_h}px))")
-                };
-                let style = self.app_canvas.style();
-                let _ = style.set_property("width", &w);
-                let _ = style.set_property("height", &h);
-            }
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(
-                    [used_width, used_height].into(),
-                ));
-            }
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                [used_width, used_height].into(),
+            ));
         }
         egui::Area::new("language_selector".into())
             .anchor(Align2::RIGHT_TOP, [-5.0, 27.0])

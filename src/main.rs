@@ -16,8 +16,6 @@ i18n!("locales", fallback = "en", minify_key = true);
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen(main)]
 fn main() {
-    #[cfg(feature = "gui")]
-    eframe::web::PanicHandler::install();
     console_log::init().expect("Failed to setup logger!");
     wasm_bindgen_futures::spawn_local(start_installer());
 }

@@ -174,7 +174,7 @@ async fn fetch_loader_versions_type(
 #[derive(Deserialize, Debug, Clone)]
 pub struct IntermediaryVersion {
     pub version: String,
-    stable: bool,
+    pub stable: bool,
     pub maven: String,
 }
 

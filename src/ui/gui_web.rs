@@ -7,7 +7,6 @@ use std::{
 };
 
 use log::info;
-use rfd::{AsyncMessageDialog, MessageButtons, MessageDialogResult};
 use tokio::sync::mpsc::unbounded_channel;
 use wasm_bindgen::{JsCast, JsValue, prelude::Closure};
 use web_sys::{
@@ -24,6 +23,38 @@ use crate::{
     },
 };
 
+mod panic_handler {
+    use wasm_bindgen::prelude::*;
+
+    /// Detects panics and logs them
+    /// Derived from https://github.com/emilk/egui/blob/e6eb00a31c7089d4458c55fcbe5f1253311a7176/crates/eframe/src/web/panic_handler.rs (MIT OR Apache-2.0)
+
+    /// Install a panic hook.
+    pub fn install() {
+        let previous_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |panic_info| {
+            // Log it using console.error
+            log::error!(
+                "{}\n\nStack:\n\n{}",
+                panic_info.to_string(),
+                Error::new().stack(),
+            );
+            previous_hook(panic_info);
+        }));
+    }
+
+    #[wasm_bindgen]
+    extern "C" {
+        type Error;
+
+        #[wasm_bindgen(constructor)]
+        fn new() -> Error;
+
+        #[wasm_bindgen(structural, method, getter)]
+        fn stack(error: &Error) -> String;
+    }
+}
+
 const LANGUAGE_COOKIE_NAME: &str = "ornithe-installer-rs_lang";
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -31,32 +62,6 @@ enum Mode {
     Client,
     Server,
     PrismLauncher,
-}
-
-fn display_dialog<T: Into<String> + Display, M: Into<String> + Display>(title: T, message: M) {
-    display_dialog_ext(title, message, MessageButtons::Ok, |_| {});
-}
-
-fn display_dialog_ext<F, T: Into<String> + Display, M: Into<String> + Display>(
-    title: T,
-    message: M,
-    buttons: MessageButtons,
-    after: F,
-) where
-    F: FnOnce(MessageDialogResult),
-    F: Send,
-    F: 'static,
-{
-    info!("Displaying dialog: {}: {}", title, message);
-    let dialog = AsyncMessageDialog::new()
-        .set_title(title)
-        .set_level(rfd::MessageLevel::Info)
-        .set_description(message)
-        .set_buttons(buttons);
-    let fut = async move {
-        after(dialog.show().await);
-    };
-    wasm_bindgen_futures::spawn_local(fut);
 }
 
 struct State {
@@ -76,12 +81,8 @@ struct State {
 }
 
 impl State {
-    pub fn abort<T: Into<String> + Display + Clone, M: Into<String> + Display>(
-        title: T,
-        message: M,
-    ) -> Result<Self, InstallerError> {
-        display_dialog(title.clone(), message);
-        return Err(InstallerError(title.into()));
+    pub fn abort<M: Into<String> + Display>(message: M) -> Result<Self, InstallerError> {
+        return Err(InstallerError(message.into()));
     }
     pub async fn create() -> Result<Self, InstallerError> {
         let mut available_minecraft_versions = Vec::new();
@@ -100,25 +101,21 @@ impl State {
                 }
             }
             _ => {
-                return Self::abort(
-                    t!("gui.error.loading"),
-                    t!("gui.error.loading.minecraft_versions"),
-                );
+                return Self::abort(t!("gui.error.loading.minecraft_versions"));
             }
         }
 
         match intermediary_future.await {
             Ok(versions) => {
                 for v in versions {
-                    available_intermediary_versions.push(v.0.clone());
-                    intermediary_versions.insert(v.0, v.1);
+                    if v.1.stable {
+                        available_intermediary_versions.push(v.0.clone());
+                        intermediary_versions.insert(v.0, v.1);
+                    }
                 }
             }
             _ => {
-                return Self::abort(
-                    t!("gui.error.loading"),
-                    t!("gui.error.loading.intermediary_versions"),
-                );
+                return Self::abort(t!("gui.error.loading.intermediary_versions"));
             }
         }
         if available_minecraft_versions.is_empty() {
@@ -140,10 +137,7 @@ impl State {
                 available_loader_versions = versions;
             }
             _ => {
-                return Self::abort(
-                    t!("gui.error.loading"),
-                    t!("gui.error.loading.loader_versions"),
-                );
+                return Self::abort(t!("gui.error.loading.loader_versions"));
             }
         }
         info!(
@@ -176,7 +170,9 @@ impl State {
 fn handle_error(initialized: bool, error: InstallerError) {
     if !initialized {
         log::error!("Failed to load installer: {}", error.0);
-        display_dialog(t!("ui.error.loading"), error.0);
+        let _ = window()
+            .expect("Window unavailable")
+            .alert_with_message(&format!("{}:\n\n{}", t!("ui.error.loading"), error.0));
         return;
     }
     display_error(t!("ui.error.loading"), error.0);
@@ -194,11 +190,12 @@ fn display_error(title: impl Into<String>, message: impl Into<String>) {
     let _ = errors_div.style().set_property("display", "block");
     errors_div.set_inner_html(&format!(
         r#"
-    <h4>{}</h4>
-    <p>{}</p>
+    <b style="font-weight: 1em;">{}</b>
+    <p style="margin-block-end: 0;">{}</p>
     "#,
         title, message
     ));
+    errors_div.scroll_into_view();
 }
 
 fn update_progress(progress: f32, status: &str) {
@@ -214,21 +211,24 @@ fn update_progress(progress: f32, status: &str) {
         .unwrap()
         .dyn_into::<HtmlElement>()
         .unwrap();
-    let _ = document
+    let output_pane = document
         .get_element_by_id("output_pane")
         .unwrap()
         .dyn_into::<HtmlElement>()
-        .unwrap()
-        .style()
-        .set_property("display", "block");
-    if !output_log.inner_text().is_empty() {
-        let _ = output_log.insert_adjacent_text("beforeend", "\n");
+        .unwrap();
+    let _ = output_pane.style().set_property("display", "block");
+    if !status.is_empty() {
+        if !output_log.inner_text().is_empty() {
+            let _ = output_log.insert_adjacent_text("beforeend", "\n");
+        }
+        let _ = output_log.insert_adjacent_text("beforeend", status);
     }
-    let _ = output_log.insert_adjacent_text("beforeend", status);
+    progress_bar.scroll_into_view();
     output_log.scroll_into_view_with_bool(false);
 }
 
 pub async fn run() {
+    panic_handler::install();
     if let Err(e) = run0().await {
         handle_error(false, e);
     }
@@ -291,15 +291,63 @@ fn setup() -> Result<(), InstallerError> {
     let _ = body.set_attribute("style", "display: flex; justify-content: center;");
     let mut html = String::new();
     html.write_str(
-        "<div id=\"web_installer\" style=\"
-                color: #f0f0f0;
-                font-size: 24px;
-                font-family: Ubuntu-Light, Helvetica, sans-serif;
-                position: absolute;
-                /*top: 50%; left: 50%;
-                transform: translate(-50%, -55%);*/
-                overflow: scroll;
-            \">",
+        r#"
+        <style>
+        #web_installer {
+            color: #f0f0f0;
+            font-size: 24px;
+            font-family: Ubuntu-Light, Helvetica, sans-serif;
+            position: absolute;
+        }
+
+        h3 {
+            margin-block: 1em 2px;
+        }
+
+        #env_header {
+            display: flex;
+            align-items: center;
+        }
+
+        #language_container {
+            margin-block: 1em 2px;
+        }
+
+        #options {
+            margin-block-start: 1em;
+        }
+
+        .info_pane {
+            overflow: scroll;
+            border-radius: 12px;
+            padding: 10px;
+            margin-block-start: 1em;
+        }
+
+        #output_pane {
+            outline: #525252 solid;
+            background: #777777;
+            font-size: 16px;
+        }
+
+        #errors {
+            outline: #f00 solid;
+            background: #ff000080;
+            color: #2b2b2b;
+        }
+
+        #download {
+            margin: 30px;
+            padding: 0 20px 0 20px;
+            font-weight: bold;
+            font-size: 30px;
+        }
+
+        #output_progress {
+            width: 100%;
+        }
+        </style>
+        <div id="web_installer">"#,
     )?;
     write!(
         html,
@@ -310,12 +358,12 @@ fn setup() -> Result<(), InstallerError> {
     write!(
         html,
         r#"
-        <div id="env_header" style="display: flex; align-items: center;">
+        <div id="env_header">
             <h3 style="flex-grow: 1;">{}</h3>
             <div id="language_container">
-            <label for="language_selector">{}</label>
-            <select id="language_selector">{}</select>
-        </div>
+                <label for="language_selector">{}</label>
+                <select id="language_selector">{}</select>
+            </div>
         </div>
         "#,
         t!("gui.ui.environment"),
@@ -388,7 +436,7 @@ fn setup() -> Result<(), InstallerError> {
     )?;
     write!(
         html,
-        r#"<div id="options" style="padding-top: 10px;">
+        r#"<div id="options">
             <input type="checkbox" checked id="include_flap" />
             <label for="include_flap">{}</label>
             <input type="checkbox" checked id="download_server" style="display: none;" />
@@ -400,35 +448,24 @@ fn setup() -> Result<(), InstallerError> {
     write!(html, "</div>")?;
     write!(
         html,
-        r#"
-            <div id="output_pane" style="display: none;">
+        r#"<div class="info_pane" id="output_pane" style="display: none;">
             <h3>{}</h3>
-        <pre 
-            style="overflow: scroll; outline: #525252 solid; border-radius: 12px; font-size: 16px; padding: 0 10px 0 10px;" 
-            id="output"
-        ></pre>
-        <progress id="output_progress" max="1" width: 100%"></progress>
+            <pre id="output"></pre>
+            <progress id="output_progress" max="1"></progress>
         </div>"#,
         t!("gui.ui.output")
     )?;
     write!(
         html,
-        r#"<div 
-            id="errors" 
-            style="outline: #f00 solid; background: #ff000080; border-radius: 12px; padding: 0 10px 0 10px; display: none; color: #2b2b2b"
-        >
-        </div>"#
+        r#"<div class="info_pane" id="errors" style="display: none;"></div>"#
     )?;
     write!(
         html,
-        r#"<div 
-                style="text-align: center; margin-top: 30px;" 
-                id="download_button"
-            >
-                <button 
-                    style="padding: 0 20px 0 20px;"
-                    id="download"><h3>{}</h3></button>
-            </div>"#,
+        r#"
+        <div style="text-align: center;">
+            <button id="download">{}</button>
+        </div>
+        "#,
         t!("gui.button.install_web")
     )?;
     write!(html, "</div>")?;

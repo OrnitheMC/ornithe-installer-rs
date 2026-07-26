@@ -3,7 +3,7 @@ use std::{borrow::Cow, fmt::Debug, path::StripPrefixError};
 #[derive(Debug)]
 pub struct InstallerError(pub String);
 
-#[cfg(feature = "gui")]
+#[cfg(all(feature = "gui", not(target_arch = "wasm32")))]
 impl From<eframe::Error> for InstallerError {
     fn from(value: eframe::Error) -> Self {
         InstallerError(format!("{}", value))

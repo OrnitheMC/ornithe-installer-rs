@@ -12,7 +12,7 @@ pub mod gui;
 #[cfg(all(feature = "gui", target_arch = "wasm32"))]
 pub mod gui_web;
 
-#[cfg(feature = "gui")]
+#[cfg(all(feature = "gui", not(target_arch = "wasm32")))]
 mod font_loader;
 
 #[allow(unused)]

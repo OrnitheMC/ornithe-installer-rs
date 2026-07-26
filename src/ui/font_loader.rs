@@ -23,41 +23,11 @@ struct SystemFontList {
     linux: PlatformFonts,
     #[cfg(target_os = "macos")]
     macos: PlatformFonts,
-    #[cfg(target_arch = "wasm32")]
-    web: PlatformFonts,
 }
 
 type PlatformFonts = HashMap<String, Vec<String>>;
 
 pub fn load_system_font_to_egui(ctx: &egui::Context) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        let sys_font_list: SystemFontList =
-            serde_json::from_str(FONT_LIST).expect("failed to parse font list");
-        let c = ctx.clone();
-        wasm_bindgen_futures::spawn_local(async move {
-            let mut result: HashMap<String, FontData> = HashMap::new();
-            load_fonts_from_url(&sys_font_list.web, &mut result).await;
-            for font in result {
-                let font_insert = FontInsert::new(
-                    &font.0,
-                    font.1,
-                    vec![
-                        InsertFontFamily {
-                            family: Proportional,
-                            priority: Lowest, // low priority to not override existing fonts
-                        },
-                        InsertFontFamily {
-                            family: Monospace,
-                            priority: Lowest,
-                        },
-                    ],
-                );
-
-                c.add_font(font_insert);
-            }
-        });
-    }
     #[cfg(not(target_arch = "wasm32"))]
     {
         let system_font = find_system_font();
@@ -88,7 +58,6 @@ pub fn load_system_font_to_egui(ctx: &egui::Context) {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn find_system_font() -> HashMap<String, FontData> {
     let sys_font_list: SystemFontList =
         serde_json::from_str(FONT_LIST).expect("failed to parse font list");
@@ -116,59 +85,6 @@ fn find_system_font() -> HashMap<String, FontData> {
     }
 
     result
-}
-
-#[cfg(target_arch = "wasm32")]
-async fn load_fonts_from_url(
-    platform_fonts: &PlatformFonts,
-    result: &mut HashMap<String, FontData>,
-) {
-    use wasm_bindgen::JsCast;
-    use web_sys::Cache;
-
-    let cache = web_sys::window()
-        .expect("Window not available")
-        .caches()
-        .expect("CacheStorage not available")
-        .open(env!("CARGO_PKG_NAME"))
-        .await
-        .map(|v| v.dyn_into::<Cache>())
-        .flatten()
-        .expect("Cache not available");
-    for (language, font_urls) in platform_fonts {
-        for url in font_urls {
-            use web_sys::Response;
-
-            if let Ok(stored) = cache
-                .match_with_str(url)
-                .await
-                .map(|v| v.dyn_into::<Response>())
-                .flatten()
-            {
-                if let Some(buf) = stored.array_buffer().unwrap().await.ok() {
-                    use web_sys::js_sys::Uint8Array;
-
-                    result.insert(
-                        language.clone(),
-                        FontData::from_owned(Uint8Array::new(&buf).to_vec()),
-                    );
-                    log::info!("Loaded font for {language} ({url}) from cache");
-                    continue;
-                }
-            }
-            if let Ok(b) = crate::net::get_bytes_client(&crate::net::UNCONFIGURED_CLIENT, url).await
-            {
-                let mut response_buf = b.clone();
-                let _ = cache
-                    .put_with_str(
-                        url,
-                        &Response::new_with_opt_u8_array(Some(&mut response_buf)).unwrap(),
-                    )
-                    .await;
-                result.insert(language.clone(), FontData::from_owned(b));
-            }
-        }
-    }
 }
 
 #[cfg(any(windows, target_os = "macos"))]
