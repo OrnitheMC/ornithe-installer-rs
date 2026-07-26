@@ -1,13 +1,12 @@
 use std::{
     collections::HashMap,
     fmt::Display,
-    hash::Hash,
     path::{Path, PathBuf},
     sync::mpsc::{Receiver, Sender},
 };
 
 use egui::{
-    Align, Align2, Button, Checkbox, Color32, ComboBox, FontId, Frame, Id, Margin, Modal,
+    Align, Align2, AsId, Button, Checkbox, Color32, ComboBox, FontId, Frame, Id, Margin, Modal,
     ProgressBar, Response, RichText, ScrollArea, Sense, TextEdit, Theme, Tooltip, Ui, Vec2, Vec2b,
     Widget, WidgetInfo, WidgetText,
     text::{CCursor, CCursorRange},
@@ -736,7 +735,7 @@ impl App {
             #[cfg(target_arch = "wasm32")]
             let sender2 = sender.clone();
             let loader_type = self.selected_loader_type.clone();
-            let intermediary_version = match self.get_intermediary_version(
+            let intermediary_version = match get_intermediary_version(
                 &selected_version,
                 match self.mode {
                     Mode::Server => GameSide::Server,
@@ -943,29 +942,6 @@ impl App {
         });
     }
 
-    fn get_intermediary_version(
-        &self,
-        selected_version: &MinecraftVersion,
-        side: GameSide,
-    ) -> Result<IntermediaryVersion, InstallerError> {
-        let ver = self.intermediary_versions.get(&selected_version.id);
-        match side {
-            GameSide::Client => ver.or_else(|| {
-                self.intermediary_versions
-                    .get(&(selected_version.id.to_owned() + "-client"))
-            }),
-            GameSide::Server => ver.or_else(|| {
-                self.intermediary_versions
-                    .get(&(selected_version.id.to_owned() + "-server"))
-            }),
-        }
-        .cloned()
-        .ok_or(InstallerError::from(t!(
-            "gui.error.no_matching_intermediary_version",
-            version = selected_version.id
-        )))
-    }
-
     fn add_output(&mut self, ui: &mut egui::Ui) {
         ui.vertical(|ui| {
             let progress = self.installation_task.as_mut().unwrap();
@@ -1157,14 +1133,12 @@ impl App {
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        ctx.set_zoom_factor(1.5);
-        ctx.options_mut(|opt| {
+    fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        ui.set_zoom_factor(1.5);
+        ui.options_mut(|opt| {
             opt.fallback_theme = Theme::Light;
         });
-        ctx.style_mut(|style| {
-            style.interaction.selectable_labels = false;
-        });
+        ui.style_mut().interaction.selectable_labels = false;
 
         if let Ok(result) = self.file_picker_channel.1.try_recv() {
             self.file_picker_open = false;
@@ -1177,7 +1151,7 @@ impl eframe::App for App {
             }
         }
         let main_area_id = "main".into();
-        let mut _pixels_per_point = ctx.pixels_per_point();
+        let mut _pixels_per_point = ui.pixels_per_point();
         #[cfg(target_arch = "wasm32")]
         {
             use wasm_bindgen::JsCast as _;
@@ -1196,7 +1170,7 @@ impl eframe::App for App {
             }
             let width = element.client_width() as f32;
             let height = element.client_height() as f32;
-            let rect = ctx.memory(|m| m.area_rect(main_area_id));
+            let rect = ui.memory(|m| m.area_rect(main_area_id));
             let prev_narrow = self.narrow_viewport;
             let prev_small = self.small_viewport;
             self.narrow_viewport = rect
@@ -1216,7 +1190,7 @@ impl eframe::App for App {
             .default_width(630.0 * _pixels_per_point)
             .movable(false)
             .order(egui::Order::Background)
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                 Frame::central_panel(ui.style())
                     .show(ui, |ui| {
@@ -1236,10 +1210,10 @@ impl eframe::App for App {
             .response
             .rect;
         if self.installation_task.is_none() {
-            let used_width = content_response.width()
-                + (ctx.viewport_rect().width() - ctx.content_rect().width());
+            let used_width =
+                content_response.width() + (ui.viewport_rect().width() - ui.content_rect().width());
             let used_height = content_response.height()
-                + (ctx.viewport_rect().height() - ctx.content_rect().height());
+                + (ui.viewport_rect().height() - ui.content_rect().height());
             #[cfg(target_arch = "wasm32")]
             {
                 let mut used_w = (used_width * _pixels_per_point) as i32;
@@ -1267,7 +1241,7 @@ impl eframe::App for App {
             }
             #[cfg(not(target_arch = "wasm32"))]
             {
-                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(
                     [used_width, used_height].into(),
                 ));
             }
@@ -1275,7 +1249,7 @@ impl eframe::App for App {
         egui::Area::new("language_selector".into())
             .anchor(Align2::RIGHT_TOP, [-5.0, 27.0])
             .order(egui::Order::Middle)
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 ui.add_enabled_ui(!self.file_picker_open, |ui| {
                     self.add_language_selector(ui);
                 });
@@ -1289,7 +1263,7 @@ impl eframe::App for App {
             let modal = &self.modals[i];
 
             let modal_id = Id::new(modal.title.clone() + &modal.message);
-            let remove = Modal::new(modal_id).show(ctx, |ui| {
+            let remove = Modal::new(modal_id).show(ui, |ui| {
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                 let response = ui.scope(|ui| {
                     ui.vertical_centered(|ui| ui.heading(&modal.title));
@@ -1474,7 +1448,7 @@ impl<'a, F: FnMut(&mut Ui, &str) -> Response, V: AsRef<str>, I: Iterator<Item = 
     /// Creates new dropdown box.
     pub fn from_iter(
         it: impl IntoIterator<IntoIter = I>,
-        id_source: impl Hash,
+        id_source: impl AsId,
         buf: &'a mut String,
         display: F,
         open_state: &'a mut bool,
@@ -1607,6 +1581,6 @@ impl<F: FnMut(&mut Ui, &str) -> Response, V: AsRef<str>, I: Iterator<Item = V>> 
             r.mark_changed();
         }
 
-        r
+        r.response
     }
 }

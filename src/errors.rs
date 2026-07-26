@@ -28,6 +28,12 @@ impl From<std::io::Error> for InstallerError {
     }
 }
 
+impl From<std::fmt::Error> for InstallerError {
+    fn from(value: std::fmt::Error) -> Self {
+        InstallerError(format!("{}", value))
+    }
+}
+
 impl From<zip::result::ZipError> for InstallerError {
     fn from(value: zip::result::ZipError) -> Self {
         InstallerError(format!("{}", value))

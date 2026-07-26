@@ -29,7 +29,7 @@ impl LoaderVersion {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, Copy)]
 pub enum LoaderType {
     Fabric,
     Quilt,

@@ -1,9 +1,16 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
+
+use crate::{
+    errors::InstallerError,
+    net::{GameSide, manifest::MinecraftVersion, meta::IntermediaryVersion},
+};
 
 pub mod cli;
 
-#[cfg(feature = "gui")]
+#[cfg(all(feature = "gui", not(target_arch = "wasm32")))]
 pub mod gui;
+#[cfg(all(feature = "gui", target_arch = "wasm32"))]
+pub mod gui_web;
 
 #[cfg(feature = "gui")]
 mod font_loader;
@@ -110,4 +117,25 @@ pub fn server_location() -> String {
 #[cfg(target_arch = "wasm32")]
 pub fn server_location() -> String {
     ".".to_owned()
+}
+
+fn get_intermediary_version(
+    intermediary_versions: HashMap<String, IntermediaryVersion>,
+    selected_version: &MinecraftVersion,
+    side: GameSide,
+) -> Result<IntermediaryVersion, InstallerError> {
+    let ver = intermediary_versions.get(&selected_version.id);
+    match side {
+        GameSide::Client => {
+            ver.or_else(|| intermediary_versions.get(&(selected_version.id.to_owned() + "-client")))
+        }
+        GameSide::Server => {
+            ver.or_else(|| intermediary_versions.get(&(selected_version.id.to_owned() + "-server")))
+        }
+    }
+    .cloned()
+    .ok_or(InstallerError::from(t!(
+        "gui.error.no_matching_intermediary_version",
+        version = selected_version.id
+    )))
 }

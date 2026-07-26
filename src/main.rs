@@ -38,23 +38,30 @@ async fn start_installer() {
     #[cfg(feature = "gui")]
     {
         #[cfg(target_arch = "wasm32")]
-        let gui = web_sys::window()
-            .expect("Window not available")
-            .location()
-            .search()
-            .unwrap_or(String::new())
-            .is_empty();
-        #[cfg(not(target_arch = "wasm32"))]
-        let gui = std::env::args().count() <= 1;
-        if gui {
-            #[cfg(windows)]
-            hide_console_ng::hide_console();
-            log::info!("Ornithe Installer v{}", VERSION);
-            if crate::ui::gui::run().await.is_ok() {
+        {
+            if web_sys::window()
+                .expect("Window not available")
+                .location()
+                .search()
+                .unwrap_or(String::new())
+                .is_empty()
+            {
+                crate::ui::gui_web::run().await;
                 return;
             }
-            #[cfg(windows)]
-            hide_console_ng::show_unconditionally();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if std::env::args().count() <= 1 {
+                #[cfg(windows)]
+                hide_console_ng::hide_console();
+                log::info!("Ornithe Installer v{}", VERSION);
+                if crate::ui::gui::run().await.is_ok() {
+                    return;
+                }
+                #[cfg(windows)]
+                hide_console_ng::show_unconditionally();
+            }
         }
     }
 

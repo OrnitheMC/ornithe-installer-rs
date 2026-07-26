@@ -3,11 +3,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 
-    <!-- Disable zooming: -->
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, user-scalable=no"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Ornithe Installer</title>
     <script type="module">
       import init, * as bindings from "./public/ornithe-installer-rs.js";
@@ -31,11 +27,6 @@
     />
 
     <style>
-      html {
-        /* Remove touch delay: */
-        touch-action: manipulation;
-      }
-
       body {
         /* Light mode background color for what is not covered by the egui canvas,
             or where the egui canvas is translucent. */
@@ -48,25 +39,6 @@
                 or where the egui canvas is translucent. */
           background: #404040;
         }
-      }
-
-      /* Allow canvas to fill entire web page: */
-      html,
-      body {
-        margin: 0 !important;
-        padding: 0 !important;
-        height: 100%;
-        width: 100%;
-      }
-
-      /* Make canvas fill entire document: */
-      canvas {
-        margin-right: auto;
-        margin-left: auto;
-        display: block;
-        position: absolute;
-        width: calc(min(630px, 100%));
-        height: calc(min(380px, 100%));
       }
 
       .centered {
@@ -117,12 +89,8 @@
   </head>
 
   <body>
-    <!-- The WASM code will resize the canvas dynamically -->
-    <!-- the id is hardcoded in gui.rs. so, make sure both match. -->
-    <canvas class="centered" id="main_canvas"></canvas>
-
-    <!-- the loading spinner will be removed in gui.rs -->
-    <!-- make sure the ids of these elements are kept, they are referenced in rust (both gui.rs and cli.rs)! -->
+    <!-- the loading spinner will be removed in gui_web.rs -->
+    <!-- make sure the ids of these elements are kept, they are referenced in rust (both gui_we.rs and cli.rs)! -->
     <div class="centered">
       <div id="loading_text">
         <noscript
