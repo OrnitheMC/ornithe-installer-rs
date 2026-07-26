@@ -170,12 +170,18 @@ impl State {
 fn handle_error(initialized: bool, error: InstallerError) {
     if !initialized {
         log::error!("Failed to load installer: {}", error.0);
+        if let Some(loading_text) = get_document().get_element_by_id("loading_text") {
+            loading_text.set_inner_html(&format!(
+                "<h3>Encountered error:</h3><p style=\"overflow: scroll;\">{}</p>",
+                &error.0
+            ));
+        }
         let _ = window()
             .expect("Window unavailable")
-            .alert_with_message(&format!("{}:\n\n{}", t!("ui.error.loading"), error.0));
+            .alert_with_message(&format!("{}:\n\n{}", t!("gui.error.loading"), error.0));
         return;
     }
-    display_error(t!("ui.error.loading"), error.0);
+    display_error(t!("gui.error.loading"), error.0);
 }
 
 fn display_error(title: impl Into<String>, message: impl Into<String>) {
