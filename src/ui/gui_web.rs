@@ -240,16 +240,19 @@ async fn run0() -> Result<(), InstallerError> {
         .location()
         .search()
         .unwrap_or(String::new());
-    let queries = search[1..].split("&").collect::<Vec<&str>>();
     let mut used_lang_from_query = false;
-    for params in queries {
-        let mut s = params.split("=");
-        if let Some(name) = s.next()
-            && name == "lang"
-            && let Some(value) = s.next()
-        {
-            used_lang_from_query = true;
-            rust_i18n::set_locale(value);
+    if !search.is_empty() {
+        let queries = search[1..].split("&").collect::<Vec<&str>>();
+
+        for params in queries {
+            let mut s = params.split("=");
+            if let Some(name) = s.next()
+                && name == "lang"
+                && let Some(value) = s.next()
+            {
+                used_lang_from_query = true;
+                rust_i18n::set_locale(value);
+            }
         }
     }
     if !used_lang_from_query
