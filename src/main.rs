@@ -42,7 +42,7 @@ async fn start_installer() {
                 .location()
                 .search()
                 .unwrap_or(String::new());
-            if search.is_empty() || search.contains("lang") {
+            if search.is_empty() || search.starts_with("?lang") {
                 crate::ui::gui_web::run().await;
                 return;
             }

@@ -172,7 +172,8 @@ fn handle_error(initialized: bool, error: InstallerError) {
         log::error!("Failed to load installer: {}", error.0);
         if let Some(loading_text) = get_document().get_element_by_id("loading_text") {
             loading_text.set_inner_html(&format!(
-                "<h3>Encountered error:</h3><p style=\"overflow: scroll;\">{}</p>",
+                "<h3>{}:</h3><p style=\"overflow: scroll;\">{}</p>",
+                t!("gui.error.loading"),
                 &error.0
             ));
         }
@@ -229,8 +230,7 @@ fn update_progress(progress: f32, status: &str) {
         }
         let _ = output_log.insert_adjacent_text("beforeend", status);
     }
-    progress_bar.scroll_into_view();
-    output_log.scroll_into_view_with_bool(false);
+    output_pane.scroll_into_view_with_bool(false);
 }
 
 pub async fn run() {
@@ -327,22 +327,26 @@ fn setup() -> Result<(), InstallerError> {
         }
 
         .info_pane {
-            overflow: scroll;
             border-radius: 12px;
             padding: 10px;
-            margin-block-start: 1em;
         }
 
-        #output_pane {
+        #output_pane_content {
             outline: #525252 solid;
             background: #777777;
             font-size: 16px;
+        }
+
+        #output {
+            overflow: scroll;
+            white-space: pre-wrap;
         }
 
         #errors {
             outline: #f00 solid;
             background: #ff000080;
             color: #2b2b2b;
+            margin-block-start: 1em;
         }
 
         #download {
@@ -457,10 +461,12 @@ fn setup() -> Result<(), InstallerError> {
     write!(html, "</div>")?;
     write!(
         html,
-        r#"<div class="info_pane" id="output_pane" style="display: none;">
+        r#"<div id="output_pane" style="display: none;">
             <h3>{}</h3>
-            <pre id="output"></pre>
-            <progress id="output_progress" max="1"></progress>
+            <div class="info_pane" id="output_pane_content">
+                <pre id="output"></pre>
+                <progress id="output_progress" max="1"></progress>
+            </div>
         </div>"#,
         t!("gui.ui.output")
     )?;

@@ -119,6 +119,7 @@ pub fn server_location() -> String {
     ".".to_owned()
 }
 
+#[cfg(feature = "gui")]
 fn get_intermediary_version(
     intermediary_versions: HashMap<String, IntermediaryVersion>,
     selected_version: &MinecraftVersion,
