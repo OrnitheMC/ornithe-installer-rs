@@ -101,6 +101,11 @@ pub async fn install(
     #[cfg(not(target_arch = "wasm32"))]
     let mut writer: Box<dyn super::Writer> = Box::new(versions_dir);
 
+    let _ = sender.send((0.8, t!("client.info.creating_files").into()));
+
+    writer.create_dir(&vanilla_profile_name)?;
+    writer.create_dir(&profile_name)?;
+
     if include_flap {
         writer.write_file(
             &format!("{}/flap.jar", profile_name),
@@ -127,11 +132,6 @@ pub async fn install(
             }
         }
     }
-
-    let _ = sender.send((0.8, t!("client.info.creating_files").into()));
-
-    writer.create_dir(&vanilla_profile_name)?;
-    writer.create_dir(&profile_name)?;
 
     writer.write_file(
         &format!("{}/{}.json", vanilla_profile_name, vanilla_profile_name),
