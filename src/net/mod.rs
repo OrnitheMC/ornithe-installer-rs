@@ -73,6 +73,7 @@ pub async fn get_bytes_client(
     Ok(client.get(url.into()).send().await?.bytes().await?.to_vec())
 }
 
+#[derive(PartialEq)]
 pub enum GameSide {
     Client,
     Server,

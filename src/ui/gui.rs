@@ -32,6 +32,15 @@ enum Mode {
     PrismLauncher,
 }
 
+impl Mode {
+    fn to_game_side(&self) -> GameSide {
+        match self {
+            Mode::Server => GameSide::Server,
+            _ => GameSide::Client,
+        }
+    }
+}
+
 pub async fn run() -> Result<(), InstallerError> {
     info!("Starting GUI installer...");
     if let Ok(locale) = current_locale::current_locale() {
@@ -493,15 +502,21 @@ impl App {
             .available_minecraft_versions
             .iter()
             .filter(|v| {
-                self.available_intermediary_versions.contains(&v.id)
-                    || self.available_intermediary_versions.contains(
+                let intermediary_version = if self.available_intermediary_versions.contains(&v.id) {
+                    self.intermediary_versions.get(&v.id)
+                } else if self.available_intermediary_versions.contains(
                         &(v.id.clone()
                             + "-"
-                            + match self.mode {
-                                Mode::Server => "server",
-                                _ => "client",
-                            }),
-                    )
+                            + self.mode.to_game_side().id()),
+                    ) {
+                        self.intermediary_versions.get(
+                        &(v.id.clone()
+                            + "-"
+                            + self.mode.to_game_side().id()))
+                    } else {
+                        return false;
+                    };
+                intermediary_version.map_or_default(|i| i.environment.matches(self.mode.to_game_side()))
             })
             .filter(|v| {
                 if self.show_snapshots && self.show_historical {

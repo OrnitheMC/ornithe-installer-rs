@@ -1,6 +1,6 @@
 plugins {
     java
-    id("xyz.wagyourtail.jvmdowngrader") version "1.3.4"
+    id("xyz.wagyourtail.jvmdowngrader") version "2.0.1"
 }
 
 java {

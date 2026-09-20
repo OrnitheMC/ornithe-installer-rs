@@ -64,6 +64,15 @@ enum Mode {
     PrismLauncher,
 }
 
+impl Mode {
+    fn to_game_side(&self) -> GameSide {
+        match self {
+            Mode::Server => GameSide::Server,
+            _ => GameSide::Client,
+        }
+    }
+}
+
 struct State {
     mode: Cell<Mode>,
     selected_minecraft_version: RefCell<String>,
@@ -555,16 +564,22 @@ fn update_minecraft_versions(state: &mut Rc<State>) {
         .available_minecraft_versions
         .iter()
         .filter(|v| {
-            state.available_intermediary_versions.contains(&v.id)
-                || state.available_intermediary_versions.contains(
-                    &(v.id.clone()
-                        + "-"
-                        + match state.mode.get() {
-                            Mode::Server => "server",
-                            _ => "client",
-                        }),
-                )
-        })
+                let intermediary_version = if self.available_intermediary_versions.contains(&v.id) {
+                    self.intermediary_versions.get(&v.id)
+                } else if self.available_intermediary_versions.contains(
+                        &(v.id.clone()
+                            + "-"
+                            + self.mode.to_game_side().id()),
+                    ) {
+                        self.intermediary_versions.get(
+                        &(v.id.clone()
+                            + "-"
+                            + self.mode.to_game_side().id()))
+                    } else {
+                        return false;
+                    };
+                intermediary_version.map_or_default(|i| i.environment.matches(self.mode.to_game_side()))
+            })
         .filter(|v| {
             if state.show_snapshots.get() && state.show_historical.get() {
                 return true;

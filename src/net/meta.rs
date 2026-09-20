@@ -176,6 +176,25 @@ pub struct IntermediaryVersion {
     pub version: String,
     pub stable: bool,
     pub maven: String,
+    pub environment: IntermediaryEnvironment,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub enum IntermediaryEnvironment {
+    #[serde(rename(deserialize = "*"))]
+    All,
+    Client,
+    Server,
+}
+
+impl IntermediaryEnvironment {
+    pub fn matches(&self, side: GameSide) -> bool {
+        match self {
+            IntermediaryEnvironment::All => true,
+            IntermediaryEnvironment::Client => side == GameSide::Client,
+            IntermediaryEnvironment::Server => side == GameSide::Server,
+        }
+    }
 }
 
 pub async fn fetch_intermediary_versions(

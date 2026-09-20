@@ -28,7 +28,7 @@ fn main() {
         std::fs::copy(server_launcher, out_dir)
             .expect("Copying should be succeed, need ServerLauncher to embed!");
     } else {
-        Command::new(format!(
+        if !Command::new(format!(
             "{}/{}",
             &proj_dir,
             if cfg!(windows) {
@@ -41,7 +41,9 @@ fn main() {
         .arg("--stacktrace")
         .arg("--no-daemon")
         .status()
-        .expect("Gradle build should succeed");
+        .expect("Gradle build should succeed").success() {
+            panic!("Failed to build server launcher!")
+        }
     }
     println!("cargo::rerun-if-changed=java/build.gradle.kts");
     println!("cargo::rerun-if-changed=java/src");
