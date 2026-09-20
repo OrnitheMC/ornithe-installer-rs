@@ -75,7 +75,7 @@ impl GameSide {
 
 pub async fn fetch_launch_json(
     side: GameSide,
-    intermediary: &IntermediaryVersion,
+    version: &str,
     loader_type: &LoaderType,
     loader_version: &LoaderVersion,
     generation: &Option<u32>,
@@ -90,7 +90,7 @@ pub async fn fetch_launch_json(
         META_URL.to_owned()
             + &endpoint
                 .replacen("{}", loader_type.get_name(), 1)
-                .replacen("{}", &intermediary.version, 1)
+                .replacen("{}", version, 1)
                 .replacen("{}", &loader_version.version, 1),
     )
     .await?;
@@ -100,9 +100,9 @@ pub async fn fetch_launch_json(
         .to_owned();
 
     text["inheritsFrom"] =
-        Value::String(manifest::vanilla_profile_name(&intermediary.version, generation).await?);
+        Value::String(manifest::vanilla_profile_name(version, generation).await?);
 
-    let library_upgrades = fetch_profile_libraries(generation, &intermediary.version).await?;
+    let library_upgrades = fetch_profile_libraries(generation, version).await?;
 
     if let Some(libraries) = text["libraries"].as_array_mut() {
         for lib in &mut *libraries {
@@ -176,23 +176,33 @@ pub struct IntermediaryVersion {
     pub version: String,
     pub stable: bool,
     pub maven: String,
-    pub environment: IntermediaryEnvironment,
+    pub environment: GameEnvironment,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Debug, Clone)]
+pub struct GameVersion {
+    pub version: String,
+    pub stable: bool,
+    pub environment: GameEnvironment,
 }
 
 #[derive(Deserialize, Debug, Clone)]
-pub enum IntermediaryEnvironment {
+pub enum GameEnvironment {
     #[serde(rename(deserialize = "*"))]
     All,
+    #[serde(rename(deserialize = "client"))]
     Client,
+    #[serde(rename(deserialize = "server"))]
     Server,
 }
 
-impl IntermediaryEnvironment {
+impl GameEnvironment {
     pub fn matches(&self, side: GameSide) -> bool {
         match self {
-            IntermediaryEnvironment::All => true,
-            IntermediaryEnvironment::Client => side == GameSide::Client,
-            IntermediaryEnvironment::Server => side == GameSide::Server,
+            GameEnvironment::All => true,
+            GameEnvironment::Client => side == GameSide::Client,
+            GameEnvironment::Server => side == GameSide::Server,
         }
     }
 }
@@ -210,6 +220,16 @@ pub async fn fetch_intermediary_versions(
         out.insert(ver.version.clone(), ver);
     }
     Ok(out)
+}
+
+pub async fn fetch_game_versions(
+    generation: &Option<u32>,
+) -> Result<Vec<GameVersion>, InstallerError> {
+    let url = match generation {
+        Some(g) => format!("/v3/versions/gen{}/game", g),
+        None => "/v3/versions/game".to_owned(),
+    };
+    super::get_json::<Vec<GameVersion>>(META_URL.to_owned() + &url).await
 }
 
 #[allow(dead_code)]

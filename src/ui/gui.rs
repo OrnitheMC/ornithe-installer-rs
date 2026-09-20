@@ -20,7 +20,7 @@ use crate::{
     net::{
         self, GameSide,
         manifest::MinecraftVersion,
-        meta::{IntermediaryVersion, LoaderType, LoaderVersion},
+        meta::{GameVersion, IntermediaryVersion, LoaderType, LoaderVersion},
     },
     ui::font_loader::load_system_font_to_egui,
 };
@@ -65,7 +65,7 @@ async fn create_window() -> Result<(), InstallerError> {
     let res = App::create().await;
     if let Err(e) = res {
         error!("{}", e.0);
-        display_dialog(t!("gui.error.generic"), &e.0);
+        //display_dialog(t!("gui.error.generic"), &e.0);
         return Ok(());
     }
     let app = res.unwrap();
@@ -123,8 +123,8 @@ struct App {
     mode: Mode,
     selected_minecraft_version: String,
     available_minecraft_versions: Vec<MinecraftVersion>,
+    meta_available_minecraft_versions: HashMap<String, GameVersion>,
     intermediary_versions: HashMap<String, IntermediaryVersion>,
-    available_intermediary_versions: Vec<String>,
     filtered_minecraft_versions: Vec<String>,
     show_snapshots: bool,
     show_historical: bool,
@@ -264,10 +264,11 @@ impl App {
     }
     async fn create() -> Result<App, InstallerError> {
         let mut available_minecraft_versions = Vec::new();
-        let mut available_intermediary_versions = Vec::new();
+        let mut meta_available_minecraft_versions = HashMap::new();
         let available_loader_versions;
         let mut intermediary_versions = HashMap::new();
         let manifest_future = net::manifest::fetch_versions(&None);
+        let meta_game_versions_future = net::meta::fetch_game_versions(&None);
         let intermediary_future = net::meta::fetch_intermediary_versions(&None);
         let loader_future = net::meta::fetch_loader_versions(&None);
 
@@ -286,11 +287,25 @@ impl App {
             }
         }
 
+        match meta_game_versions_future.await {
+            Ok(versions) => {
+                for ele in versions {
+                    meta_available_minecraft_versions.insert(ele.version.clone(), ele);
+                }
+            }
+            Err(e) => {
+                log::error!("Error: {:?}", e);
+                return Self::abort(
+                    t!("gui.error.loading"),
+                    t!("gui.error.loading.minecraft_versions"),
+                );
+            }
+        }
+
         match intermediary_future.await {
             Ok(versions) => {
                 for v in versions {
                     if v.1.stable {
-                        available_intermediary_versions.push(v.0.clone());
                         intermediary_versions.insert(v.0, v.1);
                     }
                 }
@@ -313,7 +328,7 @@ impl App {
         );
         info!(
             "Loaded {} Intermediary versions",
-            available_intermediary_versions.len()
+            intermediary_versions.len()
         );
 
         match loader_future.await {
@@ -336,8 +351,8 @@ impl App {
             mode: Mode::Client,
             selected_minecraft_version: String::new(),
             available_minecraft_versions,
+            meta_available_minecraft_versions,
             intermediary_versions,
-            available_intermediary_versions,
             filtered_minecraft_versions: Vec::new(),
             show_snapshots: false,
             show_historical: false,
@@ -502,21 +517,9 @@ impl App {
             .available_minecraft_versions
             .iter()
             .filter(|v| {
-                let intermediary_version = if self.available_intermediary_versions.contains(&v.id) {
-                    self.intermediary_versions.get(&v.id)
-                } else if self.available_intermediary_versions.contains(
-                        &(v.id.clone()
-                            + "-"
-                            + self.mode.to_game_side().id()),
-                    ) {
-                        self.intermediary_versions.get(
-                        &(v.id.clone()
-                            + "-"
-                            + self.mode.to_game_side().id()))
-                    } else {
-                        return false;
-                    };
-                intermediary_version.map_or_default(|i| i.environment.matches(self.mode.to_game_side()))
+                self.meta_available_minecraft_versions
+                    .get(&v.id)
+                    .map_or_default(|i| i.environment.matches(self.mode.to_game_side()))
             })
             .filter(|v| {
                 if self.show_snapshots && self.show_historical {
@@ -639,6 +642,7 @@ impl App {
             let include_flap = self.include_flap;
             let (sender, receiver) = unbounded_channel();
             let loader_type = self.selected_loader_type.clone();
+
             let intermediary_version = match crate::ui::get_intermediary_version(
                 self.intermediary_versions.clone(),
                 &selected_version,

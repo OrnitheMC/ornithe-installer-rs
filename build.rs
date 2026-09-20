@@ -41,7 +41,9 @@ fn main() {
         .arg("--stacktrace")
         .arg("--no-daemon")
         .status()
-        .expect("Gradle build should succeed").success() {
+        .expect("Gradle build should succeed")
+        .success()
+        {
             panic!("Failed to build server launcher!")
         }
     }

@@ -10,7 +10,7 @@ use crate::{
     net::{
         GameSide,
         manifest::MinecraftVersion,
-        meta::{IntermediaryVersion, LoaderType, LoaderVersion},
+        meta::{GameVersion, IntermediaryVersion, LoaderType, LoaderVersion},
     },
 };
 
@@ -494,20 +494,23 @@ async fn get_minecraft_information(
     }
     let minecraft_versions = crate::net::manifest::fetch_versions(&generation).await?;
     let intermediary_versions = crate::net::meta::fetch_intermediary_versions(&generation).await?;
+    let meta_game_versions = crate::net::meta::fetch_game_versions(&None).await?;
+    let mut meta_versions_map = HashMap::with_capacity(meta_game_versions.len());
+    for ele in meta_game_versions {
+        meta_versions_map.insert(ele.version.clone(), ele);
+    }
 
     let mut available_minecraft_versions = Vec::new();
 
     for version in minecraft_versions.versions {
-        if intermediary_versions.contains_key(&version.id)
-            || intermediary_versions.contains_key(&(version.id.clone() + "-client"))
-            || intermediary_versions.contains_key(&(version.id.clone() + "-server"))
-        {
+        if meta_versions_map.contains_key(&version.id) {
             available_minecraft_versions.push(version);
         }
     }
     Ok(MinecraftInformation {
         intermediary_versions,
         available_minecraft_versions,
+        meta_game_versions: meta_versions_map,
         calamus_generation: generation,
     })
 }
@@ -515,13 +518,21 @@ async fn get_minecraft_information(
 struct MinecraftInformation {
     intermediary_versions: HashMap<String, IntermediaryVersion>,
     available_minecraft_versions: Vec<MinecraftVersion>,
+    meta_game_versions: HashMap<String, GameVersion>,
     calamus_generation: Option<u32>,
 }
 
 async fn get_minecraft_version(
     matches: &ArgMatches,
     side: GameSide,
-) -> Result<(MinecraftVersion, IntermediaryVersion, MinecraftInformation), InstallerError> {
+) -> Result<
+    (
+        MinecraftVersion,
+        Option<IntermediaryVersion>,
+        MinecraftInformation,
+    ),
+    InstallerError,
+> {
     let info = get_minecraft_information(matches).await?;
     let minecraft_version_arg = matches.get_one::<String>("minecraft-version").unwrap();
 
@@ -532,7 +543,7 @@ async fn get_minecraft_version(
                 .get(&version.id)
                 .or_else(|| intermediary_versions.get(&(version.id.to_owned() + "-" + side.id())));
             if let Some(int) = intermediary {
-                return Ok((version.clone(), int.clone(), info));
+                return Ok((version.clone(), Some(int.clone()), info));
             } else if !intermediary_versions.contains_key(&version.id)
                 && intermediary_versions
                     .contains_key(&(version.id.to_owned() + "-" + side.other_side().id()))
@@ -546,6 +557,8 @@ async fn get_minecraft_version(
                         + side.other_side().id()
                         + "-only!",
                 ));
+            } else if info.meta_game_versions.contains_key(&version.id) {
+                return Ok((version.clone(), None, info));
             }
         }
     }

@@ -17,7 +17,7 @@ use crate::{
 pub async fn install(
     sender: UnboundedSender<(f32, String)>,
     version: MinecraftVersion,
-    intermediary: IntermediaryVersion,
+    intermediary: Option<IntermediaryVersion>,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
     generation: Option<u32>,
@@ -61,7 +61,10 @@ pub async fn install(
 
     let (profile_name, mut ornithe_launch_json) = meta::fetch_launch_json(
         crate::net::GameSide::Client,
-        &intermediary,
+        &intermediary
+            .clone()
+            .map(|i| i.version)
+            .unwrap_or(version.id.clone()),
         &loader_type,
         &loader_version,
         &generation,

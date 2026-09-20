@@ -20,30 +20,6 @@
             "important": true,
             "uid": "net.minecraft",
             "version": "${mc_version}"
-        },
-        {
-            "cachedName": "Intermediary Mappings",
-            "cachedRequires": [
-                {
-                    "equals": "${mc_version}",
-                    "uid": "net.minecraft"
-                }
-            ],
-            "cachedVersion": "${intermediary_ver}",
-            "dependencyOnly": true,
-            "uid": "net.fabricmc.intermediary",
-            "version": "${mc_version}"
-        },
-        {
-            "cachedName": "${loader_name}",
-            "cachedRequires": [
-                {
-                    "uid": "net.fabricmc.intermediary"
-                }
-            ],
-            "cachedVersion": "${loader_version}",
-            "uid": "${loader_uid}",
-            "version": "${loader_version}"
         }
     ],
     "formatVersion": 1

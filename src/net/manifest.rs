@@ -107,6 +107,9 @@ pub struct MinecraftVersion {
 }
 
 impl MinecraftVersion {
+    pub async fn get_version_details(&self) -> Result<VersionDetails, InstallerError> {
+        fetch_version_details(self).await
+    }
     pub async fn get_jar_download_url(
         &self,
         side: &GameSide,

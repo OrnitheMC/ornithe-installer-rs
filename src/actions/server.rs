@@ -25,7 +25,7 @@ use crate::{
 pub async fn install(
     sender: UnboundedSender<(f32, String)>,
     version: MinecraftVersion,
-    intermediary: IntermediaryVersion,
+    intermediary: Option<IntermediaryVersion>,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
     generation: Option<u32>,
@@ -70,7 +70,7 @@ pub async fn install(
 async fn install_path(
     sender: UnboundedSender<(f32, String)>,
     version: &MinecraftVersion,
-    intermediary: &IntermediaryVersion,
+    intermediary: &Option<IntermediaryVersion>,
     loader_type: &LoaderType,
     loader_version: &LoaderVersion,
     generation: &Option<u32>,
@@ -116,7 +116,10 @@ async fn install_path(
 
     let (_, launch_json) = crate::net::meta::fetch_launch_json(
         crate::net::GameSide::Server,
-        intermediary,
+        &intermediary
+            .clone()
+            .map(|i| i.version)
+            .unwrap_or(version.id.clone()),
         loader_type,
         loader_version,
         generation,
@@ -569,7 +572,7 @@ fn split_artifact(artifact: &str) -> String {
 pub async fn install_and_run<I, S>(
     sender: UnboundedSender<(f32, String)>,
     version: MinecraftVersion,
-    intermediary: IntermediaryVersion,
+    intermediary: Option<IntermediaryVersion>,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
     generation: Option<u32>,

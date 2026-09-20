@@ -124,7 +124,10 @@ fn get_intermediary_version(
     intermediary_versions: HashMap<String, IntermediaryVersion>,
     selected_version: &MinecraftVersion,
     side: GameSide,
-) -> Result<IntermediaryVersion, InstallerError> {
+) -> Result<Option<IntermediaryVersion>, InstallerError> {
+    /*if selected_version.get_version_details().unobfuscated { // TODO unobf support
+        return Ok(None);
+    }*/
     let ver = intermediary_versions.get(&selected_version.id);
     match side {
         GameSide::Client => {
@@ -139,4 +142,5 @@ fn get_intermediary_version(
         "gui.error.no_matching_intermediary_version",
         version = selected_version.id
     )))
+    .map(|v| Some(v))
 }

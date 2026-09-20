@@ -22,7 +22,7 @@ const MMC_PACK: &str = include_str!("../../res/packformat/mmc-pack.json");
 pub async fn install(
     sender: UnboundedSender<(f32, String)>,
     version: MinecraftVersion,
-    intermediary_version: IntermediaryVersion,
+    intermediary_version: Option<IntermediaryVersion>,
     loader_type: LoaderType,
     loader_version: LoaderVersion,
     output_dir: PathBuf,
@@ -57,14 +57,6 @@ pub async fn install(
     let output_dir = output_dir.canonicalize()?;
 
     let _ = sender.send((0.2, t!("mmc.info.fetching_version_information").into()));
-    let intermediary_maven = intermediary_version
-        .maven
-        .clone()
-        .strip_suffix(&(":".to_owned() + &intermediary_version.version))
-        .ok_or(InstallerError::from(t!(
-            "mmc.error.failed_to_retrieve_intermediary_coordinates"
-        )))?
-        .to_owned();
 
     let (lwjgl_url, lwjgl_version) = manifest::find_lwjgl_url_version(&version).await?;
 
@@ -75,24 +67,32 @@ pub async fn install(
 
     let _ = sender.send((0.4, t!("mmc.info.transforming_templates").into()));
 
-    let mut transformed_pack_json = serde_json::from_str::<Value>(
-        &transform_pack_json(
-            &version,
-            &loader_type,
-            &loader_version,
-            &lwjgl_version,
-            &intermediary_version.version,
-        )
-        .await?,
-    )?;
+    let mut transformed_pack_json =
+        serde_json::from_str::<Value>(&transform_pack_json(&version, &lwjgl_version).await?)?;
 
-    let transformed_intermediary_patch =
-        transform_intermediary_patch(&version, &intermediary_version.version, &intermediary_maven)
-            .await?;
+    let transformed_intermediary_patch = if let Some(intermediary) = intermediary_version.clone() {
+        let intermediary_maven = intermediary
+            .maven
+            .clone()
+            .strip_suffix(&(":".to_owned() + &intermediary.version))
+            .ok_or(InstallerError::from(t!(
+                "mmc.error.failed_to_retrieve_intermediary_coordinates"
+            )))?
+            .to_owned();
+        Some(
+            transform_intermediary_patch(&version, &intermediary.version, &intermediary_maven)
+                .await?,
+        )
+    } else {
+        None
+    };
 
     let (_, ornithe_launch_json) = meta::fetch_launch_json(
         GameSide::Client,
-        &intermediary_version,
+        &intermediary_version
+            .clone()
+            .map(|i| i.version)
+            .unwrap_or(version.id.clone()),
         &loader_type,
         &loader_version,
         &generation,
@@ -169,16 +169,35 @@ pub async fn install(
     zip.create_dir("patches")?;
 
     zip.write_file(
-        "patches/net.fabricmc.intermediary.json",
-        transformed_intermediary_patch.as_bytes(),
-    )?;
-
-    zip.write_file(
         "patches/net.minecraft.json",
         minecraft_patch_json.as_bytes(),
     )?;
 
     let pack_components = transformed_pack_json["components"].as_array_mut().unwrap();
+
+    if let Some(intermediary_patch) = transformed_intermediary_patch {
+        zip.write_file(
+            "patches/net.fabricmc.intermediary.json",
+            intermediary_patch.as_bytes(),
+        )?;
+        pack_components.push(json!({
+            "cachedName": "Intermediary Mappings",
+            "cachedRequires": [
+                {
+                    "equals": version.id,
+                    "uid": "net.minecraft"
+                }
+            ],
+            "cachedVersion": intermediary_version.unwrap().version,
+            "dependencyOnly": true,
+            "uid": "net.fabricmc.intermediary",
+            "version": version.id
+        }));
+        pack_components.push(get_loader_component(&loader_type, &loader_version, true));
+    } else {
+        pack_components.push(get_loader_component(&loader_type, &loader_version, false));
+    }
+
     let _ = sender.send((0.75, t!("mmc.info.adding_library_components").into()));
     for library in extra_libs {
         let mut colons = library
@@ -300,23 +319,34 @@ async fn transform_intermediary_patch(
         .replace("${intermediary_maven}", intermediary_maven))
 }
 
-async fn transform_pack_json(
-    version: &MinecraftVersion,
+fn get_loader_component(
     loader_type: &LoaderType,
     loader_version: &LoaderVersion,
+    has_intermediary: bool,
+) -> Value {
+    let mut json = json!({
+        "cachedName": &(loader_type.get_localized_name().to_owned() + " Loader"),
+        "cachedVersion": loader_version.version,
+        "uid": loader_type.get_maven_uid(),
+        "version": loader_version.version
+    });
+    if has_intermediary {
+        let obj = json.as_object_mut().unwrap();
+        obj.insert(
+            "cachedRequires".to_string(),
+            json!([{"uid": "net.fabricmc.intermediary"}]),
+        );
+    }
+    json
+}
+
+async fn transform_pack_json(
+    version: &MinecraftVersion,
     lwjgl_version: &str,
-    intermediary_version: &str,
 ) -> Result<String, InstallerError> {
     let lwjgl_major = lwjgl_version.chars().next().unwrap();
     Ok(MMC_PACK
         .replace("${mc_version}", &version.id)
-        .replace("${intermediary_ver}", intermediary_version)
-        .replace("${loader_version}", &loader_version.version)
-        .replace(
-            "${loader_name}",
-            &(loader_type.get_localized_name().to_owned() + " Loader"),
-        )
-        .replace("${loader_uid}", loader_type.get_maven_uid())
         .replace("${lwjgl_version}", lwjgl_version)
         .replace("${lwjgl_major_ver}", &lwjgl_major.to_string())
         .replace(
