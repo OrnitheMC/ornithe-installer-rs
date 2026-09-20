@@ -519,7 +519,7 @@ impl App {
             .filter(|v| {
                 self.meta_available_minecraft_versions
                     .get(&v.id)
-                    .map_or_default(|i| i.environment.matches(self.mode.to_game_side()))
+                    .map_or_default(|i| i.stable && i.environment.matches(self.mode.to_game_side()))
             })
             .filter(|v| {
                 if self.show_snapshots && self.show_historical {

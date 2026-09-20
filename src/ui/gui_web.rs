@@ -578,7 +578,7 @@ fn update_minecraft_versions(state: &mut Rc<State>) {
             state
                 .meta_available_minecraft_versions
                 .get(&v.id)
-                .map_or_default(|i| i.environment.matches(state.mode.get().to_game_side()))
+                .map_or_default(|i| i.stable && i.environment.matches(state.mode.get().to_game_side()))
         })
         .filter(|v| {
             if state.show_snapshots.get() && state.show_historical.get() {
